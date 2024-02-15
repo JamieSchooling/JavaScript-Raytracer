@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+
+<body>
+
+<canvas id="canvas" width="400" height="300" style="border:1px solid#000000;">
+Your browser does not support the HTML canvas tag.
+</canvas>
+
+<script>
+
+
+// Simple vector in 3D with numbers for x, y and z
+class Vec3
+{
+    constructor (x, y, z)
+    {
+        this.x = x
+        this.y = y
+        this.z = z
+    }
+
+    // Add other vector to this one and return the result
+    add(other)
+    {
+        return new Vec3(this.x + other.x, this.y + other.y, this.z + other.z)
+    }
+
+    // Subtract other vector from this one and return the result
+    minus(other){}
+
+    // Multiply other vector by this one and return the result
+    multiply(other){}
+
+    // Scale this vector by the number scalar and return the result
+    scale(scalar){}
+    
+    // Calculate the dot product of this vector with the other and return the result
+    dot(other) {}
+
+    // Calculate and return the magnitude of this vector
+    magnitude() {}
+    
+    // Calculate and return the magnitude of this vector without the square root
+    magnitudeSquared() {}
+
+    // Return a normalised version of this vector
+    normalised() {}
+}
+
+// A sphere in 3D space. Has centre, radius and colour all of which are Vec3s
+class Sphere
+{
+    constructor (centre, radius, colour)
+    {
+        this.centre = centre
+        this.radius = radius
+        this.colour = colour
+    }
+
+    // Calculate the point on the sphere  where the ray intersects using 
+    // a quadratic equation and return the t value of the ray for that point
+    // If two solutions exist return the minus solution
+    // If no solutions exist return -1
+    rayIntersects(ray)  {}
+}
+
+// Ray which has an origin and direction, both are Vec3s
+class Ray
+{
+    constructor (origin, direction)
+    {
+        this.origin = origin
+        this.direction = direction
+    }
+
+    // Calculate and return the point in space (a Vec3) for this ray for the given value of t
+    pointAt(t) {}
+}
+
+// The result of casting a ray into our scene
+// Position is the point where the ray intersects a sphere in the scene
+// Normal is the normal unit vector of the sphere at the intersection point
+// t is the t value along the ray where the intersection point is.  This value should, be -1 when the ray hits nothing
+// SphereIndex is the array index of the sphere hit by the ray
+class RayCastResult
+{
+    constructor(position, normal, t, sphereIndex)
+    {
+        this.position = position
+        this.normal = normal
+        this.t = t
+        this.sphereIndex = sphereIndex
+    }
+}
+
+// Calculate the intersection point and normal when a ray hits a sphere. Returns a RayCastResult.
+function hit(ray, t, sphereIndex) {}
+
+// Return a RayCastResult when a ray misses everything in the scene
+function miss()
+{
+    return new RayCastResult(new Vec3(0,0,0), new Vec3(0,0,0), -1, -1)
+}
+
+// Check whether a ray hits anything in the scene and return a RayCast Result
+function traceRay(ray)
+{
+    return miss()
+}
+
+// Calculate and return the background colour based on the ray
+function backgroundColour(ray)
+{
+        return new Vec3(0.3,0.5,0.9) // Blue
+}
+
+// Returns the colour the ray should have as a Vec3 with RGB values in [0,1]
+function rayColour(ray) 
+{
+    let castResult = traceRay(ray)
+    if(castResult.t < 0) return backgroundColour(ray)
+    return new Vec3(1,0,0) // Red
+}
+
+// Sets a pixel at (x, y) in the canvas with an RGB Vec3
+function setPixel(x, y, colour)
+{
+    var c = document.getElementById("canvas")
+    var ctx = c.getContext("2d")
+    ctx.fillStyle = "rgba("+colour.x+","+colour.y+","+colour.z+","+1+")"
+    ctx.fillRect(x, c.height - y, 1, 1)
+}
+
+const spheres = new Array(
+    new Sphere(new Vec3(0,0,-1), 0.3, new Vec3(1,0,0)),       // Red sphere
+    new Sphere(new Vec3(0,0.2,-0.8), 0.15, new Vec3(0,0,1)),  // Blue sphere
+    new Sphere(new Vec3(0,-100.5,-1), 100, new Vec3(0,1,0))   // Big green sphere
+    );
+
+
+// Main code
+let imageWidth = document.getElementById("canvas").width
+let imageHeight = document.getElementById("canvas").height
+let aspectRatio = document.getElementById("canvas").height / document.getElementById("canvas").width
+
+let colour = new Vec3(0,0,0)
+
+for (let i = 0; i < imageWidth; i++)
+{
+    for (let j = 0; j <= imageHeight; j++)
+    {
+        setPixel(i,j,colour)
+    }
+}
+
+</script>
+
+</body>
+</html>
