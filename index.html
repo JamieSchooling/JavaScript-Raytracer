@@ -165,6 +165,10 @@ for (let i = 0; i < imageWidth; i++)
 {
     for (let j = 0; j <= imageHeight; j++)
     {
+        let u = i / (imageWidth-1);
+        let v = j / (imageHeight-1);
+        colour.x = u * 255;
+        colour.y = v * 255;
         setPixel(i,j,colour);
     }
 }
