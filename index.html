@@ -88,7 +88,9 @@ class Ray
     }
 
     // Calculate and return the point in space (a Vec3) for this ray for the given value of t
-    pointAt(t) {}
+    pointAt(t) {
+        return this.origin.add(this.direction.scale(t));
+    }
 }
 
 // The result of casting a ray into our scene
@@ -163,7 +165,7 @@ for (let i = 0; i < imageWidth; i++)
 {
     for (let j = 0; j <= imageHeight; j++)
     {
-        setPixel(i,j,colour)
+        setPixel(i,j,colour);
     }
 }
 
