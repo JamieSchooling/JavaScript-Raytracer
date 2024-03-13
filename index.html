@@ -159,7 +159,16 @@ let imageWidth = document.getElementById("canvas").width
 let imageHeight = document.getElementById("canvas").height
 let aspectRatio = document.getElementById("canvas").height / document.getElementById("canvas").width
 
-let colour = new Vec3(0,0,0)
+let viewportWidth = 2;
+let viewportHeight = viewportWidth * aspectRatio;
+let focalLength = 1.0;
+
+let camPosition = new Vec3(0, 0, 0);
+let horizontal = new Vec3(viewportWidth, 0, 0);
+let vertical = new Vec3(0, viewportHeight, 0);
+let lowerLeftCorner = camPosition.minus(horizontal.scale(0.5)).minus(vertical.scale(0.5)).minus(new Vec3(0, 0, focalLength));
+
+let colour = new Vec3(0,0,0);
 
 for (let i = 0; i < imageWidth; i++)
 {
@@ -167,8 +176,9 @@ for (let i = 0; i < imageWidth; i++)
     {
         let u = i / (imageWidth-1);
         let v = j / (imageHeight-1);
-        colour.x = u * 255;
-        colour.y = v * 255;
+
+        let ray = new Ray(camPosition, lowerLeftCorner.add(horizontal.scale(u)).add(vertical.scale(v)).minus(camPosition));
+        colour = rayColour(ray).scale(255);
         setPixel(i,j,colour);
     }
 }
