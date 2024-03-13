@@ -75,7 +75,19 @@ class Sphere
     // a quadratic equation and return the t value of the ray for that point
     // If two solutions exist return the minus solution
     // If no solutions exist return -1
-    rayIntersects(ray)  {}
+    rayIntersects(ray) {
+        let rayOrigin = ray.origin.minus(this.centre);
+        let a = ray.direction.dot(ray.direction);
+        let b = 2 * rayOrigin.dot(ray.direction);
+        let c = rayOrigin.dot(rayOrigin) - this.radius * this.radius;
+        let discriminant = b * b - 4 * a * c;
+
+        if (discriminant >= 0) {
+            return (-b - Math.sqrt(discriminant)) / (2 * a);
+        } else {
+            return -1;
+        }
+    }
 }
 
 // Ray which has an origin and direction, both are Vec3s
@@ -110,7 +122,11 @@ class RayCastResult
 }
 
 // Calculate the intersection point and normal when a ray hits a sphere. Returns a RayCastResult.
-function hit(ray, t, sphereIndex) {}
+function hit(ray, t, sphereIndex) {
+    let intersectionPoint = ray.pointAt(t);
+    let intersectionNormal = 0;
+    return new RayCastResult(intersectionPoint, intersectionNormal, t, sphereIndex);
+}
 
 // Return a RayCastResult when a ray misses everything in the scene
 function miss()
@@ -121,7 +137,10 @@ function miss()
 // Check whether a ray hits anything in the scene and return a RayCast Result
 function traceRay(ray)
 {
-    return miss();
+    let sphere = spheres[0];
+    let t = sphere.rayIntersects(ray);
+    if (t < 0) return miss();
+    else return hit(ray, t, 0);
 }
 
 // Calculate and return the background colour based on the ray
