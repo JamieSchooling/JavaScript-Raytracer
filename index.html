@@ -124,7 +124,7 @@ class RayCastResult
 // Calculate the intersection point and normal when a ray hits a sphere. Returns a RayCastResult.
 function hit(ray, t, sphereIndex) {
     let intersectionPoint = ray.pointAt(t);
-    let intersectionNormal = 0;
+    let intersectionNormal = intersectionPoint.minus(spheres[sphereIndex].centre);
     return new RayCastResult(intersectionPoint, intersectionNormal, t, sphereIndex);
 }
 
@@ -157,7 +157,7 @@ function rayColour(ray)
 {
     let castResult = traceRay(ray);
     if(castResult.t < 0) return backgroundColour(ray);
-    return new Vec3(1,0,0); // Red
+    return castResult.normal;
 }
 
 // Sets a pixel at (x, y) in the canvas with an RGB Vec3
