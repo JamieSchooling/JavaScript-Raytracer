@@ -168,9 +168,14 @@ function rayColour(ray)
     if(castResult.t < 0) return backgroundColour(ray);
 
     let albedo = spheres[castResult.sphereIndex].colour;
+    let specularPower = 20;
+    let specularStrength = 0.8;
+    let reflectedDir = lightDirection.minus(castResult.normal.scale(2).scale(castResult.normal.dot(lightDirection))).normalised();
+    let viewDir = camPosition.minus(castResult.position).normalised();
+    let specular = Math.pow(Math.max(viewDir.dot(reflectedDir), 0), specularPower) * specularStrength;
     let diffuse = Math.max(castResult.normal.dot(negLightDirection), 0);
-    let colour = albedo.scale(diffuse);
-
+    let ambient = 0.05;
+    let colour = albedo.scale(ambient + diffuse + specular);
     return colour;
 }
 
