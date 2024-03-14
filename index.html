@@ -137,10 +137,19 @@ function miss()
 // Check whether a ray hits anything in the scene and return a RayCast Result
 function traceRay(ray)
 {
-    let sphere = spheres[0];
-    let t = sphere.rayIntersects(ray);
-    if (t < 0) return miss();
-    else return hit(ray, t, 0);
+    let t = Infinity;
+    let closestSphereIndex = -1;
+
+    for (let i = 0; i < spheres.length; i++) {
+        let currentT = spheres[i].rayIntersects(ray);
+        if (currentT > 0 && currentT < t) {
+            t = currentT;
+            closestSphereIndex = i;
+        }
+    }
+    
+    if (closestSphereIndex < 0) return miss();
+    return hit(ray, t, closestSphereIndex);
 }
 
 // Calculate and return the background colour based on the ray
@@ -157,7 +166,12 @@ function rayColour(ray)
 {
     let castResult = traceRay(ray);
     if(castResult.t < 0) return backgroundColour(ray);
-    return castResult.normal;
+
+    let albedo = spheres[castResult.sphereIndex].colour;
+    let diffuse = Math.max(castResult.normal.dot(negLightDirection), 0);
+    let colour = albedo.scale(diffuse);
+
+    return colour;
 }
 
 // Sets a pixel at (x, y) in the canvas with an RGB Vec3
@@ -175,6 +189,8 @@ const spheres = new Array(
     new Sphere(new Vec3(0,-100.5,-1), 100, new Vec3(0,1,0))   // Big green sphere
 );
 
+let lightDirection  = new Vec3(-1.1, -1.3, -1.5).normalised();
+let negLightDirection = new Vec3(-lightDirection.x, -lightDirection.y, -lightDirection.z);
 
 // Main code
 let imageWidth = document.getElementById("canvas").width
