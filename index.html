@@ -47,7 +47,7 @@ class Vec3
 
     // Calculate and return the magnitude of this vector
     magnitude() {
-        return Math.sqrt(this.magnitude);
+        return Math.sqrt(this.magnitudeSquared());
     }
     
     // Calculate and return the magnitude of this vector without the square root
@@ -57,7 +57,7 @@ class Vec3
 
     // Return a normalised version of this vector
     normalised() {
-        return this.scale(1 / this.magnitude);
+        return this.scale(1 / this.magnitude());
     }
 }
 
@@ -124,7 +124,7 @@ class RayCastResult
 // Calculate the intersection point and normal when a ray hits a sphere. Returns a RayCastResult.
 function hit(ray, t, sphereIndex) {
     let intersectionPoint = ray.pointAt(t);
-    let intersectionNormal = intersectionPoint.minus(spheres[sphereIndex].centre);
+    let intersectionNormal = intersectionPoint.minus(spheres[sphereIndex].centre).normalised();
     return new RayCastResult(intersectionPoint, intersectionNormal, t, sphereIndex);
 }
 
