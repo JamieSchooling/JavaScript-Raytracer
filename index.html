@@ -11,10 +11,8 @@ Your browser does not support the HTML canvas tag.
 
 
 // Simple vector in 3D with numbers for x, y and z
-class Vec3
-{
-    constructor (x, y, z)
-    {
+class Vec3 {
+    constructor(x, y, z) {
         this.x = x;
         this.y = y;
         this.z = z;
@@ -45,6 +43,10 @@ class Vec3
         return (this.x * other.x) + (this.y * other.y) + (this.z * other.z);
     }
 
+    cross(other) {
+        return new Vec3(this.y * other.z - this.z * other.y, this.z * other.x - this.x * other.z, this.x * other.y - this.y * other.x);
+    }
+
     // Calculate and return the magnitude of this vector
     magnitude() {
         return Math.sqrt(this.magnitudeSquared());
@@ -62,10 +64,8 @@ class Vec3
 }
 
 // A sphere in 3D space. Has centre, radius and colour all of which are Vec3s
-class Sphere
-{
-    constructor (centre, radius, colour)
-    {
+class Sphere {
+    constructor(centre, radius, colour) {
         this.centre = centre;
         this.radius = radius;
         this.colour = colour;
@@ -83,18 +83,66 @@ class Sphere
         let discriminant = b * b - 4 * a * c;
 
         if (discriminant >= 0) {
-            return (-b - Math.sqrt(discriminant)) / (2 * a);
+            let t = (-b - Math.sqrt(discriminant)) / (2 * a);
+            let intersectionPoint = ray.pointAt(t);
+            let intersectionNormal = intersectionPoint.minus(this.centre).normalised();
+            return new RayCastResult(intersectionPoint, intersectionNormal, t, 0);
         } else {
-            return -1;
+            return miss();
         }
     }
 }
 
+class Triangle {
+    constructor(posA, posB, posC, normalA, normalB, normalC) {
+        this.posA = posA;
+        this.posB = posB;
+        this.posC = posC;
+        this.normalA = normalA;
+        this.normalB = normalB;
+        this.normalC = normalC;
+    }
+
+    rayIntersects(ray) {
+        const epsilon = 0.0000001;
+
+        let edge1 = this.posB.minus(this.posA);
+        let edge2 = this.posC.minus(this.posA);
+        let rayCrossEdge2 = ray.direction.cross(edge2);
+        let determinant = edge1.dot(rayCrossEdge2);
+
+        if (determinant > -epsilon && determinant < epsilon) {
+            return miss();
+        }
+
+        let invDet = 1 / determinant;
+        let s = ray.origin.minus(this.posA);
+        let u = invDet * s.dot(rayCrossEdge2);
+
+        if (u < 0 || u > 1) {
+            return miss();
+        }
+
+        let sCrossEdge1 = s.cross(edge1);
+        let v = invDet * ray.direction.dot(sCrossEdge1);
+
+        if (v < 0 || u + v > 1) {
+            return miss();
+        }
+
+        let t = invDet * edge2.dot(sCrossEdge1);
+
+        if (t > epsilon) {
+            return new RayCastResult(ray.origin.add(ray.direction.scale(t)), edge1.cross(edge2).normalised(), t, 0);
+        } else {
+            return miss();
+        }      
+    }
+}
+
 // Ray which has an origin and direction, both are Vec3s
-class Ray
-{
-    constructor (origin, direction)
-    {
+class Ray {
+    constructor(origin, direction) {
         this.origin = origin;
         this.direction = direction;
     }
@@ -110,10 +158,8 @@ class Ray
 // Normal is the normal unit vector of the sphere at the intersection point
 // t is the t value along the ray where the intersection point is.  This value should, be -1 when the ray hits nothing
 // SphereIndex is the array index of the sphere hit by the ray
-class RayCastResult
-{
-    constructor(position, normal, t, sphereIndex)
-    {
+class RayCastResult {
+    constructor(position, normal, t, sphereIndex) {
         this.position = position;
         this.normal = normal;
         this.t = t;
@@ -129,27 +175,33 @@ function hit(ray, t, sphereIndex) {
 }
 
 // Return a RayCastResult when a ray misses everything in the scene
-function miss()
-{
+function miss() {
     return new RayCastResult(new Vec3(0,0,0), new Vec3(0,0,0), -1, -1);
 }
 
 // Check whether a ray hits anything in the scene and return a RayCast Result
-function traceRay(ray)
-{
-    let t = Infinity;
-    let closestSphereIndex = -1;
+function traceRay(ray) {
+    let closestHit = miss();
+    t = Infinity;
 
     for (let i = 0; i < spheres.length; i++) {
-        let currentT = spheres[i].rayIntersects(ray);
-        if (currentT > 0 && currentT < t) {
-            t = currentT;
-            closestSphereIndex = i;
+        let raycastResult = spheres[i].rayIntersects(ray);
+        if (raycastResult.t > 0 && raycastResult.t < t) {
+            t = raycastResult.t;
+            closestHit = raycastResult;
+            closestHit.sphereIndex = i;
         }
     }
-    
-    if (closestSphereIndex < 0) return miss();
-    return hit(ray, t, closestSphereIndex);
+
+    for (let i = 0; i < triangles.length; i++) {
+        let raycastResult = triangles[i].rayIntersects(ray);
+        if (raycastResult.t > 0 && raycastResult.t < t) {
+            t = raycastResult.t;
+            closestHit = raycastResult;
+        }
+    }
+
+    return closestHit;
 }
 
 // Calculate and return the background colour based on the ray
@@ -200,9 +252,20 @@ function setPixel(x, y, colour)
 }
 
 const spheres = new Array(
-    new Sphere(new Vec3(0,0,-1), 0.3, new Vec3(1,0,0)),       // Red sphere
-    new Sphere(new Vec3(0,0.2,-0.8), 0.15, new Vec3(0,0,1)),  // Blue sphere
-    new Sphere(new Vec3(0,-100.5,-1), 100, new Vec3(0,1,0))   // Big green sphere
+    new Sphere(new Vec3(0,0,-2), 0.3, new Vec3(1,0,0)),       // Red sphere
+    new Sphere(new Vec3(0,0.2,-1.8), 0.15, new Vec3(0,0,1)),  // Blue sphere
+    new Sphere(new Vec3(0,-100.5,-1), 100, new Vec3(0,1,0)),   // Big green sphere
+    
+    new Sphere(new Vec3(0, -0.45, -1.5), 0.05, new Vec3(0, 0, 0)),
+    new Sphere(new Vec3(-0.5, -0.45, -1), 0.05, new Vec3(0, 0, 0)),
+    new Sphere(new Vec3(0.5, -0.45, -1), 0.05, new Vec3(0, 0, 0)),
+);
+
+const triangles = new Array(
+    new Triangle(
+        new Vec3(0, -0.45, -1.5), new Vec3(-0.5, -0.45, -1), new Vec3(0.5, -0.45, -1),
+        new Vec3(0, 1, 0), new Vec3(0, 1, 0), new Vec3(0, 1, 0)
+    )
 );
 
 let lightDirection  = new Vec3(-1.1, -1.3, -1.5).normalised();
@@ -227,9 +290,8 @@ let colour = new Vec3(0,0,0);
 for (let i = 0; i < imageWidth; i++)
 {
     for (let j = 0; j <= imageHeight; j++)
-    {
-        
-        let rayCount = 50;
+    {        
+        let rayCount = 10;
         for (let n = 0; n < rayCount; n++) {
             let u = i / (imageWidth-1 + Math.random());
             let v = j / (imageHeight-1 + Math.random());
