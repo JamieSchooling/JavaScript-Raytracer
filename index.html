@@ -228,11 +228,16 @@ for (let i = 0; i < imageWidth; i++)
 {
     for (let j = 0; j <= imageHeight; j++)
     {
-        let u = i / (imageWidth-1);
-        let v = j / (imageHeight-1);
-
-        let ray = new Ray(camPosition, lowerLeftCorner.add(horizontal.scale(u)).add(vertical.scale(v)).minus(camPosition));
-        colour = rayColour(ray).scale(255);
+        
+        let rayCount = 50;
+        for (let n = 0; n < rayCount; n++) {
+            let u = i / (imageWidth-1 + Math.random());
+            let v = j / (imageHeight-1 + Math.random());
+            let randomOffeset = new Vec3(Math.random(), Math.random(), Math.random()).scale(0.005);
+            let ray = new Ray(camPosition.add(randomOffeset), lowerLeftCorner.add(horizontal.scale(u)).add(vertical.scale(v)).minus(camPosition));
+            colour = colour.add(rayColour(ray).scale(255));
+        }
+        colour = colour.scale(1/rayCount);
         setPixel(i,j,colour);
     }
 }
