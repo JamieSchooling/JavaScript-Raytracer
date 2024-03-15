@@ -183,6 +183,10 @@ function rayColour(ray)
         colour = colour.scale(0.4);
     }
 
+    colour.x = Math.sqrt(colour.x);
+    colour.y = Math.sqrt(colour.y);
+    colour.z = Math.sqrt(colour.z);
+
     return colour;
 }
 
