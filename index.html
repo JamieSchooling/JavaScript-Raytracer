@@ -405,8 +405,9 @@ async function meshFromOBJ(objPath, colour) {
 }
 
 const spheres = [
-    new Sphere(new Vec3(-0.5,0,-1), 0.3, new Material(new Vec3(0,0,0), new Vec3(1, 1, 1), 2)),       // Red sphere
-    new Sphere(new Vec3(0.3,-0.2,-.8), 0.15, new Material(new Vec3(0,0,1))),  // Blue sphere
+    new Sphere(new Vec3(-20.5,10,-40), 35, new Material(new Vec3(0,0,0), new Vec3(1, 1, 1), 2.3)),       // Red sphere
+    new Sphere(new Vec3(0,-0.2,-1), 0.3, new Material(new Vec3(1,0,0))),       // Red sphere
+    new Sphere(new Vec3(0.5,-0.35,-1.2), 0.15, new Material(new Vec3(0,0,1))),  // Blue sphere
     new Sphere(new Vec3(0,-100.5,-1), 100, new Material(new Vec3(.7,.1,.7))),   // Big sphere
 ];
 
@@ -417,9 +418,15 @@ const meshes = [];
 let lightDirection  = new Vec3(-1.1, -1.3, -1.5).normalised();
 let negLightDirection = new Vec3(-lightDirection.x, -lightDirection.y, -lightDirection.z);
 
-let imageWidth = document.getElementById("canvas").width
-let imageHeight = document.getElementById("canvas").height
-let aspectRatio = document.getElementById("canvas").height / document.getElementById("canvas").width
+
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d", {
+        willReadFrequently: true,
+    });
+
+let imageWidth = canvas.width;
+let imageHeight = canvas.height;
+let aspectRatio = imageHeight / imageWidth;
 
 let viewportWidth = 2;
 let viewportHeight = viewportWidth * aspectRatio;
@@ -432,16 +439,17 @@ let lowerLeftCorner = camPosition.minus(horizontal.scale(0.5)).minus(vertical.sc
 
 let colour = new Vec3(0,0,0);
 
+let lastFrameImageData = ctx.getImageData(0, 0, imageWidth, imageHeight);
+let numFramesRendered = 0;
 async function main() {
     // let mesh = await meshFromOBJ("hand.obj", new Material(new Vec3(1, 0.5, 0)));
     // meshes.push(mesh);
-
 
     for (let i = 0; i < imageWidth; i++)
     {
         for (let j = 0; j <= imageHeight; j++)
         {        
-            let rayCount = 20;
+            let rayCount = 10;
             for (let n = 0; n < rayCount; n++) {
                 let u = i / (imageWidth-1 + Math.random());
                 let v = j / (imageHeight-1 + Math.random());
@@ -453,6 +461,23 @@ async function main() {
             setPixel(i,j,colour);
         }
     }
+
+    let weight = 1 / (numFramesRendered + 1);
+
+    let imageData = ctx.getImageData(0, 0, imageWidth, imageHeight);
+    for (let pixelIndex = 0; pixelIndex < imageData.data.length; pixelIndex += 4) {
+        let r = lastFrameImageData.data[pixelIndex] * (1 - weight) + imageData.data[pixelIndex] * weight;
+        let g = lastFrameImageData.data[pixelIndex+1] * (1 - weight) + imageData.data[pixelIndex+1] * weight;
+        let b = lastFrameImageData.data[pixelIndex+2] * (1 - weight) + imageData.data[pixelIndex+2] * weight;
+        imageData.data[pixelIndex] = r;
+        imageData.data[pixelIndex+1] = g;
+        imageData.data[pixelIndex+2] = b;
+    }
+    ctx.putImageData(imageData, 0, 0);
+    lastFrameImageData = ctx.getImageData(0, 0, imageWidth, imageHeight);
+
+    numFramesRendered++;
+    requestAnimationFrame(main);
 }
 
 main();
