@@ -73,6 +73,10 @@ class Vec3 {
     max(other) {
         return new Vec3(Math.max(this.x, other.x), Math.max(this.y, other.y), Math.max(this.z, other.z));
     }
+
+    static lerp(a, b, t) {
+        return a.scale(1-t).add(b.scale(t));
+    }
 }
 
 // A sphere in 3D space. Has centre, radius and colour all of which are Vec3s
@@ -209,8 +213,11 @@ class RayCastResult {
 }
 
 class Material {
-    constructor(colour, emissionColour = new Vec3(0, 0, 0), emissionStrength = 0) {
+    constructor(colour, smoothness = 0, specularProbability = 0, specularColour = new Vec3(1, 1, 1), emissionColour = new Vec3(0, 0, 0), emissionStrength = 0) {
         this.colour = colour;
+        this.smoothness = smoothness;
+        this.specularProbability = specularProbability;
+        this.specularColour = specularColour;
         this.emissionColour = emissionColour;
         this.emissionStrength = emissionStrength;
     }
@@ -294,21 +301,26 @@ function randomDirection() {
 }
 
 // Returns the colour the ray should have as a Vec3 with RGB values in [0,1]
-const maxBounceCount = 10;
+const maxBounceCount = 4;
 function rayColour(ray) {
     let incomingLight = new Vec3(0, 0, 0);
     let rayColour = new Vec3(1, 1, 1);
 
     for (let i = 0; i < maxBounceCount; i++) {
         let castResult = traceRay(ray);
-        if (castResult.t >= 0) {
-            ray.origin = castResult.position;
-            ray.direction = castResult.normal.add(randomDirection()).normalised();
+        let material = castResult.material;
 
-            let material = castResult.material;
+        if (castResult.t >= 0) {
+            let isSpecularBounce = material.specularProbability >= Math.random() ? 1 : 0;
+
+            ray.origin = castResult.position;
+            let diffuseDirection = castResult.normal.add(randomDirection()).normalised();
+            let specularDirection = ray.direction.minus(castResult.normal.scale(2).scale(castResult.normal.dot(ray.direction))).normalised();
+            ray.direction = Vec3.lerp(diffuseDirection, specularDirection, material.smoothness * isSpecularBounce).normalised();
+            
             let emittedLight = material.emissionColour.scale(material.emissionStrength);
             incomingLight = incomingLight.add(emittedLight.multiply(rayColour));
-            rayColour = rayColour.multiply(material.colour);
+            rayColour = rayColour.multiply(Vec3.lerp(material.colour, material.specularColour, isSpecularBounce));
         } else {
             incomingLight = incomingLight.add(getEnvironmentLight(ray).multiply(rayColour));
             break;
@@ -396,8 +408,8 @@ async function meshFromOBJ(objPath, colour) {
 
 const spheres = [
     // new Sphere(new Vec3(-0.5,-0.2,-1), 0.2, new Material(new Vec3(0,0,0), new Vec3(0, 1, 0), 2)),       // Light sphere
-    new Sphere(new Vec3(0,-0.2,-1), 0.3, new Material(new Vec3(1,0,0))),       // Red sphere
-    new Sphere(new Vec3(0.5,-0.35,-1.2), 0.15, new Material(new Vec3(1,1,1))),  // Blue sphere
+    new Sphere(new Vec3(0,-0.2,-1), 0.3, new Material(new Vec3(1,0,0), 1, 0.02)),       // Red sphere
+    new Sphere(new Vec3(0.5,-0.35,-1.2), 0.15, new Material(new Vec3(1,1,1), 1, 0.02)),  // Blue sphere 
     new Sphere(new Vec3(0,-100.5,-1), 100, new Material(new Vec3(.7,.1,.7))),   // Big sphere
 ];
 
