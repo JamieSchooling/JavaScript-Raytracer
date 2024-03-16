@@ -61,6 +61,18 @@ class Vec3 {
     normalised() {
         return this.scale(1 / this.magnitude());
     }
+
+    inverse() {
+        return new Vec3(1 / this.x, 1 / this.y, 1 / this.z)
+    }
+
+    min(other) {
+        return new Vec3(Math.min(this.x, other.x), Math.min(this.y, other.y), Math.min(this.z, other.z));
+    }
+
+    max(other) {
+        return new Vec3(Math.max(this.x, other.x), Math.max(this.y, other.y), Math.max(this.z, other.z));
+    }
 }
 
 // A sphere in 3D space. Has centre, radius and colour all of which are Vec3s
@@ -133,7 +145,7 @@ class Triangle {
         let t = invDet * edge2.dot(sCrossEdge1);
 
         if (t > epsilon) {
-            return new RayCastResult(ray.origin.add(ray.direction.scale(t)), edge1.cross(edge2).normalised(), t);
+            return new RayCastResult(ray.pointAt(t), edge1.cross(edge2).normalised(), t);
         } else {
             return miss();
         }      
@@ -141,10 +153,30 @@ class Triangle {
 }
 
 class Mesh {
-    constructor(firstTriangleIndex, numTriangles, colour) {
+    constructor(firstTriangleIndex, numTriangles, bounds, colour) {
         this.firstTriangleIndex = firstTriangleIndex;
         this.numTriangles = numTriangles;
+        this.aabb = new AABB(bounds);
         this.colour = colour;
+    }
+}
+
+class AABB {
+    constructor(bounds) {
+        this.bounds = bounds;
+    }
+
+    rayIntersects(ray) {
+        let tMin = this.bounds[0].minus(ray.origin).multiply(ray.invDir);
+        let tMax = this.bounds[1].minus(ray.origin).multiply(ray.invDir);
+
+        let t1 = tMin.min(tMax);
+        let t2 = tMin.max(tMax);
+
+        let tNear = Math.max(Math.max(t1.x, t1.y), t1.z);
+        let tFar = Math.max(Math.max(t2.x, t2.y), t2.z);
+
+        return tNear <= tFar;
     }
 }
 
@@ -153,6 +185,7 @@ class Ray {
     constructor(origin, direction) {
         this.origin = origin;
         this.direction = direction;
+        this.invDir = direction.inverse();
     }
 
     // Calculate and return the point in space (a Vec3) for this ray for the given value of t
@@ -194,6 +227,10 @@ function traceRay(ray) {
     }
 
     for (let meshIndex = 0; meshIndex < meshes.length; meshIndex++) {
+        if (!meshes[meshIndex].aabb.rayIntersects(ray)) {
+            continue;
+        }
+
         for (let i = 0; i < meshes[meshIndex].numTriangles; i++) {
             let triIndex = meshes[meshIndex].firstTriangleIndex + i;
             let raycastResult = triangles[triIndex].rayIntersects(ray);
@@ -252,6 +289,34 @@ function setPixel(x, y, colour) {
     ctx.fillRect(x, c.height - y, 1, 1);
 }
 
+function calculateMeshBounds(verts) {
+    let boundsMin = new Vec3(Infinity, Infinity, Infinity);
+    let boundsMax = new Vec3(-Infinity, -Infinity, -Infinity);
+    
+    for (let i = 0; i < verts.length; i++) {
+        if (verts[i].x >= boundsMax.x) {
+            boundsMax.x = verts[i].x;
+        }
+        if (verts[i].y >= boundsMax.y) {
+            boundsMax.y = verts[i].y;
+        }
+        if (verts[i].z >= boundsMax.z) {
+            boundsMax.z = verts[i].z;
+        }
+        
+        if (verts[i].x < boundsMin.x) {
+            boundsMin.x = verts[i].x;
+        }
+        if (verts[i].y < boundsMin.y) {
+            boundsMin.y = verts[i].y;
+        }
+        if (verts[i].z < boundsMin.z) {
+            boundsMin.z = verts[i].z;
+        }
+    }
+    return [boundsMin, boundsMax];
+}
+
 async function meshFromOBJ(objPath, colour) {
     const objFile = await fetch(objPath); 
     const text = await objFile.text();
@@ -286,7 +351,8 @@ async function meshFromOBJ(objPath, colour) {
         }
     }
 
-    let mesh = new Mesh(triangles.length, tris.length, colour)
+    let bounds = calculateMeshBounds(verts);
+    let mesh = new Mesh(triangles.length, tris.length, bounds, colour)
     triangles.push(...tris);
     return mesh;
 }
@@ -320,15 +386,15 @@ let lowerLeftCorner = camPosition.minus(horizontal.scale(0.5)).minus(vertical.sc
 let colour = new Vec3(0,0,0);
 
 async function main() {
-    
-    //let mesh = await meshFromOBJ("icosphere.obj", new Vec3(1, 0, 0));
-    meshes.push(await meshFromOBJ("icosphere.obj", new Vec3(1, 0.5, 0)));
+    let mesh = await meshFromOBJ("icosphere.obj", new Vec3(1, 0.5, 0));
+    meshes.push(mesh);
+
 
     for (let i = 0; i < imageWidth; i++)
     {
         for (let j = 0; j <= imageHeight; j++)
         {        
-            let rayCount = 10;
+            let rayCount = 20;
             for (let n = 0; n < rayCount; n++) {
                 let u = i / (imageWidth-1 + Math.random());
                 let v = j / (imageHeight-1 + Math.random());
