@@ -293,13 +293,8 @@ function randomDirection() {
     return new Vec3(x, y, z).normalised();
 }
 
-function randomHemisphereDirection(normal) {
-    let dir = randomDirection();
-    return dir.scale(Math.sign(normal.dot(dir)));
-}
-
-const maxBounceCount = 10;
 // Returns the colour the ray should have as a Vec3 with RGB values in [0,1]
+const maxBounceCount = 10;
 function rayColour(ray) {
     let incomingLight = new Vec3(0, 0, 0);
     let rayColour = new Vec3(1, 1, 1);
@@ -308,7 +303,7 @@ function rayColour(ray) {
         let castResult = traceRay(ray);
         if (castResult.t >= 0) {
             ray.origin = castResult.position;
-            ray.direction = randomHemisphereDirection(castResult.normal);
+            ray.direction = castResult.normal.add(randomDirection()).normalised();
 
             let material = castResult.material;
             let emittedLight = material.emissionColour.scale(material.emissionStrength);
@@ -402,7 +397,7 @@ async function meshFromOBJ(objPath, colour) {
 const spheres = [
     // new Sphere(new Vec3(-0.5,-0.2,-1), 0.2, new Material(new Vec3(0,0,0), new Vec3(0, 1, 0), 2)),       // Light sphere
     new Sphere(new Vec3(0,-0.2,-1), 0.3, new Material(new Vec3(1,0,0))),       // Red sphere
-    new Sphere(new Vec3(0.5,-0.35,-1.2), 0.15, new Material(new Vec3(0,0,1))),  // Blue sphere
+    new Sphere(new Vec3(0.5,-0.35,-1.2), 0.15, new Material(new Vec3(1,1,1))),  // Blue sphere
     new Sphere(new Vec3(0,-100.5,-1), 100, new Material(new Vec3(.7,.1,.7))),   // Big sphere
 ];
 
@@ -410,9 +405,10 @@ const triangles = [];
 
 const meshes = [];
 
-let lightDirection  = new Vec3(-0.5, -0.6, 1).normalised();
+// let lightDirection  = new Vec3(-0.5, -0.6, 1).normalised();
+let lightDirection  = new Vec3(-2.5, -0.6, -1).normalised();
 let negLightDirection = new Vec3(-lightDirection.x, -lightDirection.y, -lightDirection.z);
-let lightIntensity = 30;
+let lightIntensity = 80;
 let sunFocus = 300;
 
 
