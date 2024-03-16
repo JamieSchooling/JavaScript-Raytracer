@@ -253,12 +253,31 @@ function traceRay(ray) {
     return closestHit;
 }
 
-// Calculate and return the background colour based on the ray
-function backgroundColour(ray) {
-    let white = new Vec3(1, 1, 1);
-    let blue = new Vec3(0.3, 0.5, 0.9);
-    t = 0.5 * (ray.direction.y + 1.0);
-    return white.scale(1-t).add(blue.scale(t));
+function smoothstep(edge0, edge1, x) {
+    x = clamp((x - edge0) / (edge1 - edge0));
+
+    return x * x * (3 - 2 * x);
+}
+
+function clamp(x, lowerLimit = 0, upperLimit = 1) {
+    if (x < lowerLimit) return lowerLimit;
+    if (x > upperLimit) return upperLimit;
+    return x;
+}
+
+function getEnvironmentLight(ray) {
+    const skyColourHorizon = new Vec3(1, 1, 1);
+    const skyColourZenith = new Vec3(0.3, 0.5, 0.9);
+    const groundColour = new Vec3(0.2, 0.2, 0.2);
+
+    let skyGradientT = Math.pow(smoothstep(0, 0.4, ray.direction.y), 0.35);
+    let skyGradient = skyColourHorizon.scale(1-skyGradientT).add(skyColourZenith.scale(skyGradientT));
+    let sun = Math.pow(Math.max(0, ray.direction.dot(negLightDirection)), sunFocus) * lightIntensity;
+
+    let groundToSkyT = smoothstep(-0.01, 0, ray.direction.y);
+    let sunMask = groundToSkyT >= 1 ? 1 : 0;
+    let lerped = groundColour.scale(1-groundToSkyT).add(skyGradient.scale(groundToSkyT));
+    return lerped.add(new Vec3(sun, sun, sun).scale(sunMask));
 }
 
 function randomValueNormalDistribution() {
@@ -296,36 +315,12 @@ function rayColour(ray) {
             incomingLight = incomingLight.add(emittedLight.multiply(rayColour));
             rayColour = rayColour.multiply(material.colour);
         } else {
+            incomingLight = incomingLight.add(getEnvironmentLight(ray).multiply(rayColour));
             break;
         }
     }
 
     return incomingLight;
-
-    // let castResult = traceRay(ray);
-    // if(castResult.t < 0) return backgroundColour(ray);
-
-    // let specularPower = 20;
-    // let specularStrength = 0.8;
-    // let reflectedDir = lightDirection.minus(castResult.normal.scale(2).scale(castResult.normal.dot(lightDirection))).normalised();
-    // let viewDir = camPosition.minus(castResult.position).normalised();
-    
-    // let specular = Math.pow(Math.max(viewDir.dot(reflectedDir), 0), specularPower) * specularStrength;
-    // let diffuse = Math.max(castResult.normal.dot(negLightDirection), 0);
-    // let ambient = 0.05;
-
-    // let albedo = castResult.material.colour;
-    // let colour = albedo.scale(ambient + diffuse + specular);
-
-    // if (traceRay(new Ray(castResult.position, negLightDirection)).t >= 0) {
-    //     colour = colour.scale(0.4);
-    // }
-
-    // colour.x = Math.sqrt(colour.x);
-    // colour.y = Math.sqrt(colour.y);
-    // colour.z = Math.sqrt(colour.z);
-
-    // return colour;
 }
 
 // Sets a pixel at (x, y) in the canvas with an RGB Vec3
@@ -405,7 +400,7 @@ async function meshFromOBJ(objPath, colour) {
 }
 
 const spheres = [
-    new Sphere(new Vec3(-20.5,10,-40), 35, new Material(new Vec3(0,0,0), new Vec3(1, 1, 1), 2.3)),       // Red sphere
+    // new Sphere(new Vec3(-0.5,-0.2,-1), 0.2, new Material(new Vec3(0,0,0), new Vec3(0, 1, 0), 2)),       // Light sphere
     new Sphere(new Vec3(0,-0.2,-1), 0.3, new Material(new Vec3(1,0,0))),       // Red sphere
     new Sphere(new Vec3(0.5,-0.35,-1.2), 0.15, new Material(new Vec3(0,0,1))),  // Blue sphere
     new Sphere(new Vec3(0,-100.5,-1), 100, new Material(new Vec3(.7,.1,.7))),   // Big sphere
@@ -415,8 +410,10 @@ const triangles = [];
 
 const meshes = [];
 
-let lightDirection  = new Vec3(-1.1, -1.3, -1.5).normalised();
+let lightDirection  = new Vec3(-0.5, -0.6, 1).normalised();
 let negLightDirection = new Vec3(-lightDirection.x, -lightDirection.y, -lightDirection.z);
+let lightIntensity = 30;
+let sunFocus = 300;
 
 
 const canvas = document.getElementById("canvas");
@@ -454,7 +451,7 @@ async function main() {
                 let u = i / (imageWidth-1 + Math.random());
                 let v = j / (imageHeight-1 + Math.random());
                 let randomOffeset = new Vec3(Math.random(), Math.random(), Math.random()).scale(0.005);
-                let ray = new Ray(camPosition.add(randomOffeset), lowerLeftCorner.add(horizontal.scale(u)).add(vertical.scale(v)).minus(camPosition));
+                let ray = new Ray(camPosition.add(randomOffeset), lowerLeftCorner.add(horizontal.scale(u)).add(vertical.scale(v)).minus(camPosition).normalised());
                 colour = colour.add(rayColour(ray).scale(255));
             }
             colour = colour.scale(1/rayCount);
