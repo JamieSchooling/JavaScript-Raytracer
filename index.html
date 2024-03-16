@@ -358,9 +358,9 @@ async function meshFromOBJ(objPath, colour) {
 }
 
 const spheres = [
-    new Sphere(new Vec3(0,0,-2), 0.3, new Vec3(1,0,0)),       // Red sphere
-    new Sphere(new Vec3(0,0.2,-1.8), 0.15, new Vec3(0,0,1)),  // Blue sphere
-    new Sphere(new Vec3(0,-100.5,-1), 100, new Vec3(0,1,0)),   // Big green sphere
+    // new Sphere(new Vec3(0,0,-2), 0.3, new Vec3(1,0,0)),       // Red sphere
+    // new Sphere(new Vec3(0,0.2,-1.8), 0.15, new Vec3(0,0,1)),  // Blue sphere
+    new Sphere(new Vec3(0,-100.5,-1), 100, new Vec3(1,1,1)),   // Big sphere
 ];
 
 const triangles = [];
@@ -386,7 +386,7 @@ let lowerLeftCorner = camPosition.minus(horizontal.scale(0.5)).minus(vertical.sc
 let colour = new Vec3(0,0,0);
 
 async function main() {
-    let mesh = await meshFromOBJ("icosphere.obj", new Vec3(1, 0.5, 0));
+    let mesh = await meshFromOBJ("hand.obj", new Vec3(1, 0.5, 0));
     meshes.push(mesh);
 
 
@@ -409,9 +409,6 @@ async function main() {
 }
 
 main();
-
-// Main code
-
 
 </script>
 
