@@ -86,7 +86,7 @@ class Sphere {
             let t = (-b - Math.sqrt(discriminant)) / (2 * a);
             let intersectionPoint = ray.pointAt(t);
             let intersectionNormal = intersectionPoint.minus(this.centre).normalised();
-            return new RayCastResult(intersectionPoint, intersectionNormal, t, 0);
+            return new RayCastResult(intersectionPoint, intersectionNormal, t, this.colour);
         } else {
             return miss();
         }
@@ -133,10 +133,18 @@ class Triangle {
         let t = invDet * edge2.dot(sCrossEdge1);
 
         if (t > epsilon) {
-            return new RayCastResult(ray.origin.add(ray.direction.scale(t)), edge1.cross(edge2).normalised(), t, 0);
+            return new RayCastResult(ray.origin.add(ray.direction.scale(t)), edge1.cross(edge2).normalised(), t);
         } else {
             return miss();
         }      
+    }
+}
+
+class Mesh {
+    constructor(firstTriangleIndex, numTriangles, colour) {
+        this.firstTriangleIndex = firstTriangleIndex;
+        this.numTriangles = numTriangles;
+        this.colour = colour;
     }
 }
 
@@ -159,19 +167,12 @@ class Ray {
 // t is the t value along the ray where the intersection point is.  This value should, be -1 when the ray hits nothing
 // SphereIndex is the array index of the sphere hit by the ray
 class RayCastResult {
-    constructor(position, normal, t, sphereIndex) {
+    constructor(position, normal, t, colour = new Vec3(1, 1, 1)) {
         this.position = position;
         this.normal = normal;
         this.t = t;
-        this.sphereIndex = sphereIndex;
+        this.colour = colour;
     }
-}
-
-// Calculate the intersection point and normal when a ray hits a sphere. Returns a RayCastResult.
-function hit(ray, t, sphereIndex) {
-    let intersectionPoint = ray.pointAt(t);
-    let intersectionNormal = intersectionPoint.minus(spheres[sphereIndex].centre).normalised();
-    return new RayCastResult(intersectionPoint, intersectionNormal, t, sphereIndex);
 }
 
 // Return a RayCastResult when a ray misses everything in the scene
@@ -189,24 +190,26 @@ function traceRay(ray) {
         if (raycastResult.t > 0 && raycastResult.t < t) {
             t = raycastResult.t;
             closestHit = raycastResult;
-            closestHit.sphereIndex = i;
         }
     }
 
-    for (let i = 0; i < triangles.length; i++) {
-        let raycastResult = triangles[i].rayIntersects(ray);
-        if (raycastResult.t > 0 && raycastResult.t < t) {
-            t = raycastResult.t;
-            closestHit = raycastResult;
-        }
+    for (let meshIndex = 0; meshIndex < meshes.length; meshIndex++) {
+        for (let i = 0; i < meshes[meshIndex].numTriangles; i++) {
+            let triIndex = meshes[meshIndex].firstTriangleIndex + i;
+            let raycastResult = triangles[triIndex].rayIntersects(ray);
+            if (raycastResult.t > 0 && raycastResult.t < t) {
+                t = raycastResult.t;
+                closestHit = raycastResult;
+                closestHit.colour = meshes[meshIndex].colour;
+            }   
+        }   
     }
 
     return closestHit;
 }
 
 // Calculate and return the background colour based on the ray
-function backgroundColour(ray)
-{
+function backgroundColour(ray) {
     let white = new Vec3(1, 1, 1);
     let blue = new Vec3(0.3, 0.5, 0.9);
     t = 0.5 * (ray.direction.y + 1.0);
@@ -214,8 +217,7 @@ function backgroundColour(ray)
 }
 
 // Returns the colour the ray should have as a Vec3 with RGB values in [0,1]
-function rayColour(ray) 
-{
+function rayColour(ray) {
     let castResult = traceRay(ray);
     if(castResult.t < 0) return backgroundColour(ray);
 
@@ -228,7 +230,7 @@ function rayColour(ray)
     let diffuse = Math.max(castResult.normal.dot(negLightDirection), 0);
     let ambient = 0.05;
 
-    let albedo = spheres[castResult.sphereIndex].colour;
+    let albedo = castResult.colour;
     let colour = albedo.scale(ambient + diffuse + specular);
 
     if (traceRay(new Ray(castResult.position, negLightDirection)).t >= 0) {
@@ -243,35 +245,65 @@ function rayColour(ray)
 }
 
 // Sets a pixel at (x, y) in the canvas with an RGB Vec3
-function setPixel(x, y, colour)
-{
+function setPixel(x, y, colour) {
     var c = document.getElementById("canvas");
     var ctx = c.getContext("2d");
     ctx.fillStyle = "rgba("+colour.x+","+colour.y+","+colour.z+","+1+")";
     ctx.fillRect(x, c.height - y, 1, 1);
 }
 
-const spheres = new Array(
+async function meshFromOBJ(objPath, colour) {
+    const objFile = await fetch(objPath); 
+    const text = await objFile.text();
+
+    let lines = text.split("\n");
+
+    let verts = []
+    let normals = []
+    let tris = []
+
+    for (line of lines) {
+        let chunks = line.split(" ");
+        if (chunks[0] === "v") {
+            verts.push(new Vec3(parseFloat(chunks[1]), parseFloat(chunks[2]), parseFloat(chunks[3])))
+        }
+        if (chunks[0] === "vn") {
+            normals.push(new Vec3(parseFloat(chunks[1]), parseFloat(chunks[2]), parseFloat(chunks[3])))
+        }
+        if (chunks[0] === "f") {
+            let vert1Index = chunks[1].split("//")[0] - 1;
+            let vert2Index = chunks[2].split("//")[0] - 1;
+            let vert3Index = chunks[3].split("//")[0] - 1;
+            let normal1Index = chunks[1].split("//")[1] - 1;
+            let normal2Index = chunks[2].split("//")[1] - 1;
+            let normal3Index = chunks[3].split("//")[1] - 1;
+            tris.push(
+                new Triangle(
+                    verts[vert1Index], verts[vert2Index], verts[vert3Index], 
+                    normals[normal1Index], normals[normal2Index], normals[normal3Index]
+                )
+            );
+        }
+    }
+
+    let mesh = new Mesh(triangles.length, tris.length, colour)
+    triangles.push(...tris);
+    return mesh;
+}
+
+const spheres = [
     new Sphere(new Vec3(0,0,-2), 0.3, new Vec3(1,0,0)),       // Red sphere
     new Sphere(new Vec3(0,0.2,-1.8), 0.15, new Vec3(0,0,1)),  // Blue sphere
     new Sphere(new Vec3(0,-100.5,-1), 100, new Vec3(0,1,0)),   // Big green sphere
-    
-    new Sphere(new Vec3(0, -0.45, -1.5), 0.05, new Vec3(0, 0, 0)),
-    new Sphere(new Vec3(-0.5, -0.45, -1), 0.05, new Vec3(0, 0, 0)),
-    new Sphere(new Vec3(0.5, -0.45, -1), 0.05, new Vec3(0, 0, 0)),
-);
+];
 
-const triangles = new Array(
-    new Triangle(
-        new Vec3(0, -0.45, -1.5), new Vec3(-0.5, -0.45, -1), new Vec3(0.5, -0.45, -1),
-        new Vec3(0, 1, 0), new Vec3(0, 1, 0), new Vec3(0, 1, 0)
-    )
-);
+const triangles = [];
+
+const meshes = [];
 
 let lightDirection  = new Vec3(-1.1, -1.3, -1.5).normalised();
 let negLightDirection = new Vec3(-lightDirection.x, -lightDirection.y, -lightDirection.z);
 
-// Main code
 let imageWidth = document.getElementById("canvas").width
 let imageHeight = document.getElementById("canvas").height
 let aspectRatio = document.getElementById("canvas").height / document.getElementById("canvas").width
@@ -287,22 +319,33 @@ let lowerLeftCorner = camPosition.minus(horizontal.scale(0.5)).minus(vertical.sc
 
 let colour = new Vec3(0,0,0);
 
-for (let i = 0; i < imageWidth; i++)
-{
-    for (let j = 0; j <= imageHeight; j++)
-    {        
-        let rayCount = 10;
-        for (let n = 0; n < rayCount; n++) {
-            let u = i / (imageWidth-1 + Math.random());
-            let v = j / (imageHeight-1 + Math.random());
-            let randomOffeset = new Vec3(Math.random(), Math.random(), Math.random()).scale(0.005);
-            let ray = new Ray(camPosition.add(randomOffeset), lowerLeftCorner.add(horizontal.scale(u)).add(vertical.scale(v)).minus(camPosition));
-            colour = colour.add(rayColour(ray).scale(255));
+async function main() {
+    
+    //let mesh = await meshFromOBJ("icosphere.obj", new Vec3(1, 0, 0));
+    meshes.push(await meshFromOBJ("icosphere.obj", new Vec3(1, 0.5, 0)));
+
+    for (let i = 0; i < imageWidth; i++)
+    {
+        for (let j = 0; j <= imageHeight; j++)
+        {        
+            let rayCount = 10;
+            for (let n = 0; n < rayCount; n++) {
+                let u = i / (imageWidth-1 + Math.random());
+                let v = j / (imageHeight-1 + Math.random());
+                let randomOffeset = new Vec3(Math.random(), Math.random(), Math.random()).scale(0.005);
+                let ray = new Ray(camPosition.add(randomOffeset), lowerLeftCorner.add(horizontal.scale(u)).add(vertical.scale(v)).minus(camPosition));
+                colour = colour.add(rayColour(ray).scale(255));
+            }
+            colour = colour.scale(1/rayCount);
+            setPixel(i,j,colour);
         }
-        colour = colour.scale(1/rayCount);
-        setPixel(i,j,colour);
     }
 }
+
+main();
+
+// Main code
+
 
 </script>
 
