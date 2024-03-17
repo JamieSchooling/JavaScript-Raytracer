@@ -141,6 +141,7 @@ class Triangle {
 
         let sCrossEdge1 = s.cross(edge1);
         let v = invDet * ray.direction.dot(sCrossEdge1);
+        let w = 1 - u - v; 
 
         if (v < 0 || u + v > 1) {
             return miss();
@@ -149,7 +150,8 @@ class Triangle {
         let t = invDet * edge2.dot(sCrossEdge1);
 
         if (t > epsilon) {
-            return new RayCastResult(ray.pointAt(t), edge1.cross(edge2).normalised(), t);
+            let normal = this.normalB.scale(u).add(this.normalC.scale(v)).add(this.normalA.scale(w)).normalised();
+            return new RayCastResult(ray.pointAt(t), normal, t);
         } else {
             return miss();
         }      
@@ -414,12 +416,12 @@ async function meshFromOBJ(objPath, colour) {
 
 const spheres = [
     // new Sphere(new Vec3(-0.5,-0.2,-1), 0.2, new Material(new Vec3(0,0,0), new Vec3(0, 1, 0), 2)),       // Light sphere
-    new Sphere(new Vec3(0.2,-0.2,-2), 0.3, new Material(new Vec3(1,0,0), 1, 0.02)),       // Red sphere
-    new Sphere(new Vec3(0.25,-0.35,-1.25), 0.15, new Material(new Vec3(1,1,1), 0, 0, new Vec3(1, 1, 1), new Vec3(1, 1, 1), 10)),  // Blue sphere 
-    new Sphere(new Vec3(-0.3,-0.35,-1.8), 0.1, new Material(new Vec3(1,1,0), 0, 0, new Vec3(1, 1, 1), new Vec3(1, 1, 0), 30)),  // Blue sphere 
+    // new Sphere(new Vec3(0.2,-0.2,-2), 0.3, new Material(new Vec3(1,0,0), 1, 0.02)),       // Red sphere
+    // new Sphere(new Vec3(0.25,-0.35,-1.25), 0.15, new Material(new Vec3(1,1,1), 0, 0, new Vec3(1, 1, 1), new Vec3(1, 1, 1), 10)),  // Blue sphere 
+    // new Sphere(new Vec3(-0.3,-0.35,-1.8), 0.1, new Material(new Vec3(1,1,0), 0, 0, new Vec3(1, 1, 1), new Vec3(1, 1, 0), 30)),  // Blue sphere 
     new Sphere(new Vec3(0,-100.5,-1), 100, new Material(new Vec3(.7,.1,.7))),   // Big sphere
-    new Sphere(new Vec3(-0.4,-0.2,-3), 0.3, new Material(new Vec3(0,1,0), 1, 0.02)),
-    new Sphere(new Vec3(-1, 0.2,-5.1), 0.6, new Material(new Vec3(0,1,1), 1, 0.02)),
+    // new Sphere(new Vec3(-0.4,-0.2,-3), 0.3, new Material(new Vec3(0,1,0), 1, 0.02)),
+    // new Sphere(new Vec3(-1, 0.2,-5.1), 0.6, new Material(new Vec3(0,1,1), 1, 0.02)),
 ];
 
 const triangles = [];
@@ -459,14 +461,14 @@ let colour = new Vec3(0,0,0);
 let numRaysPerPixel = 10;
 
 let divergeStrength = 1;
-let defocusStrength = 20;
+let defocusStrength = 1;
 let focusDistance = 1;
 
 let lastFrameImageData = ctx.getImageData(0, 0, imageWidth, imageHeight);
 let numFramesRendered = 0;
 async function main() {
-    // let mesh = await meshFromOBJ("hand.obj", new Material(new Vec3(1, 0.5, 0)));
-    // meshes.push(mesh);
+    let mesh = await meshFromOBJ("icosphere_smooth.obj", new Material(new Vec3(1, 0.5, 0)));
+    meshes.push(mesh);
 
     for (let i = 0; i < imageWidth; i++)
     {
