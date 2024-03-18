@@ -275,15 +275,15 @@ function clamp(x, lowerLimit = 0, upperLimit = 1) {
 }
 
 function getEnvironmentLight(ray) {
-    const skyColourHorizon = new Vec3(1, 1, 1);
-    const skyColourZenith = new Vec3(0.3, 0.5, 0.9);
-    const groundColour = new Vec3(0.2, 0.2, 0.2);
+    const skyColourHorizon = new Vec3(0.1, 0.1, 0.3);
+    const skyColourZenith = new Vec3(0.05, 0.1, 0.2);
+    const groundColour = new Vec3(0, 0, 0);
 
     let skyGradientT = Math.pow(smoothstep(0, 0.4, ray.direction.y), 0.35);
     let skyGradient = skyColourHorizon.scale(1-skyGradientT).add(skyColourZenith.scale(skyGradientT));
     let sun = Math.pow(Math.max(0, ray.direction.dot(negLightDirection)), sunFocus) * lightIntensity;
 
-    let groundToSkyT = smoothstep(-0.01, 0, ray.direction.y);
+    let groundToSkyT = smoothstep(-0.15, 0, ray.direction.y);
     let sunMask = groundToSkyT >= 1 ? 1 : 0;
     let lerped = groundColour.scale(1-groundToSkyT).add(skyGradient.scale(groundToSkyT));
     return lerped.add(new Vec3(sun, sun, sun).scale(sunMask));
@@ -309,7 +309,7 @@ function randomPointInCircle() {
 }
 
 // Returns the colour the ray should have as a Vec3 with RGB values in [0,1]
-const maxBounceCount = 4;
+const maxBounceCount = 3;
 function rayColour(ray) {
     let incomingLight = new Vec3(0, 0, 0);
     let rayColour = new Vec3(1, 1, 1);
@@ -419,7 +419,7 @@ const spheres = [
     // new Sphere(new Vec3(0.2,-0.2,-2), 0.3, new Material(new Vec3(1,0,0), 1, 0.02)),       // Red sphere
     // new Sphere(new Vec3(0.25,-0.35,-1.25), 0.15, new Material(new Vec3(1,1,1), 0, 0, new Vec3(1, 1, 1), new Vec3(1, 1, 1), 10)),  // Blue sphere 
     // new Sphere(new Vec3(-0.3,-0.35,-1.8), 0.1, new Material(new Vec3(1,1,0), 0, 0, new Vec3(1, 1, 1), new Vec3(1, 1, 0), 30)),  // Blue sphere 
-    new Sphere(new Vec3(0,-100.5,-1), 100, new Material(new Vec3(.7,.1,.7))),   // Big sphere
+    //new Sphere(new Vec3(0,-100.5,-1), 100, new Material(new Vec3(.7,.1,.7))),   // Big sphere
     // new Sphere(new Vec3(-0.4,-0.2,-3), 0.3, new Material(new Vec3(0,1,0), 1, 0.02)),
     // new Sphere(new Vec3(-1, 0.2,-5.1), 0.6, new Material(new Vec3(0,1,1), 1, 0.02)),
 ];
@@ -428,11 +428,11 @@ const triangles = [];
 
 const meshes = [];
 
-// let lightDirection  = new Vec3(-0.5, -0.3, 1).normalised();
-let lightDirection  = new Vec3(-2.5, -0.6, -1).normalised();
+let lightDirection  = new Vec3(-0.2, -0.2, 1).normalised();
+// let lightDirection  = new Vec3(-2.5, -0.6, -1).normalised();
 let negLightDirection = new Vec3(-lightDirection.x, -lightDirection.y, -lightDirection.z);
-let lightIntensity = 80;
-let sunFocus = 500;
+let lightIntensity = 1;
+let sunFocus = 800;
 
 
 const canvas = document.getElementById("canvas");
@@ -458,7 +458,7 @@ let lowerLeftCorner = camPosition.minus(horizontal.scale(0.5)).minus(vertical.sc
 
 let colour = new Vec3(0,0,0);
 
-let numRaysPerPixel = 10;
+let numRaysPerPixel = 20;
 
 let divergeStrength = 1;
 let defocusStrength = 1;
@@ -467,8 +467,23 @@ let focusDistance = 1;
 let lastFrameImageData = ctx.getImageData(0, 0, imageWidth, imageHeight);
 let numFramesRendered = 0;
 async function main() {
-    let mesh = await meshFromOBJ("icosphere_smooth.obj", new Material(new Vec3(1, 0.5, 0)));
-    meshes.push(mesh);
+    meshes.push(await meshFromOBJ("scene_objects/light_left.obj", new Material(new Vec3(0, 0, 0), 0, 0, new Vec3(0, 0, 0), new Vec3(1, 1, 1), 3.5)));
+    meshes.push(await meshFromOBJ("scene_objects/light_right.obj", new Material(new Vec3(0, 0, 0), 0, 0, new Vec3(0, 0, 0), new Vec3(1, 1, 1), 3.5)));
+    meshes.push(await meshFromOBJ("scene_objects/grass.obj", new Material(new Vec3(0.108, 0.576, 0.060))));
+    meshes.push(await meshFromOBJ("scene_objects/river.obj", new Material(new Vec3(0.155, 0.534, 0.793))));
+    meshes.push(await meshFromOBJ("scene_objects/mountain.obj", new Material(new Vec3(0.145, 0.145, 0.145))));
+    meshes.push(await meshFromOBJ("scene_objects/tree1.obj", new Material(new Vec3(0.145, 0.048, 0.010))));
+    meshes.push(await meshFromOBJ("scene_objects/tree2.obj", new Material(new Vec3(0.145, 0.048, 0.010))));
+    meshes.push(await meshFromOBJ("scene_objects/tree3.obj", new Material(new Vec3(0.145, 0.048, 0.010))));
+    meshes.push(await meshFromOBJ("scene_objects/leaves1.obj", new Material(new Vec3(0.108, 0.576, 0.060))));
+    meshes.push(await meshFromOBJ("scene_objects/leaves2.obj", new Material(new Vec3(0.108, 0.576, 0.060))));
+    meshes.push(await meshFromOBJ("scene_objects/leaves3.obj", new Material(new Vec3(0.995, 0.170, 0))));
+    meshes.push(await meshFromOBJ("scene_objects/cloud1.obj", new Material(new Vec3(1, 1, 1))));
+    meshes.push(await meshFromOBJ("scene_objects/cloud2.obj", new Material(new Vec3(1, 1, 1))));
+    meshes.push(await meshFromOBJ("scene_objects/cloud3.obj", new Material(new Vec3(1, 1, 1))));
+    meshes.push(await meshFromOBJ("scene_objects/cloud4.obj", new Material(new Vec3(1, 1, 1))));
+    meshes.push(await meshFromOBJ("scene_objects/cloud5.obj", new Material(new Vec3(1, 1, 1))));
+    meshes.push(await meshFromOBJ("scene_objects/cloud6.obj", new Material(new Vec3(1, 1, 1))));
 
     for (let i = 0; i < imageWidth; i++)
     {
