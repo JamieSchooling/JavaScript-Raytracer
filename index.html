@@ -6,7 +6,6 @@
 <canvas id="canvas" width="400" height="300" style="border:1px solid#000000;">
 Your browser does not support the HTML canvas tag.
 </canvas>
-
 <script>
 
 
@@ -436,9 +435,12 @@ let sunFocus = 800;
 
 
 const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d", {
-        willReadFrequently: true,
-    });
+const ctx = canvas.getContext("2d");
+
+const offscreenCanvas = new OffscreenCanvas(canvas.width, canvas.height);
+const offscreenCtx = offscreenCanvas.getContext("2d", {
+    willReadFrequently: true,
+});
 
 let imageWidth = canvas.width;
 let imageHeight = canvas.height;
@@ -458,7 +460,7 @@ let lowerLeftCorner = camPosition.minus(horizontal.scale(0.5)).minus(vertical.sc
 
 let colour = new Vec3(0,0,0);
 
-let numRaysPerPixel = 20;
+let numRaysPerPixel = 5;
 
 let divergeStrength = 1;
 let defocusStrength = 1;
@@ -484,6 +486,7 @@ async function main() {
     meshes.push(await meshFromOBJ("scene_objects/cloud4.obj", new Material(new Vec3(1, 1, 1))));
     meshes.push(await meshFromOBJ("scene_objects/cloud5.obj", new Material(new Vec3(1, 1, 1))));
     meshes.push(await meshFromOBJ("scene_objects/cloud6.obj", new Material(new Vec3(1, 1, 1))));
+    meshes.push(await meshFromOBJ("scene_objects/cloud5.obj", new Material(new Vec3(1, 1, 1))));
 
     for (let i = 0; i < imageWidth; i++)
     {
@@ -509,7 +512,9 @@ async function main() {
 
     let weight = 1 / (numFramesRendered + 1);
 
-    let imageData = ctx.getImageData(0, 0, imageWidth, imageHeight);
+    offscreenCtx.drawImage(canvas, 0, 0, imageWidth, imageHeight, 0, 0, imageWidth, imageHeight);
+
+    let imageData = offscreenCtx.getImageData(0, 0, imageWidth, imageHeight);
     for (let pixelIndex = 0; pixelIndex < imageData.data.length; pixelIndex += 4) {
         let r = lastFrameImageData.data[pixelIndex] * (1 - weight) + imageData.data[pixelIndex] * weight;
         let g = lastFrameImageData.data[pixelIndex+1] * (1 - weight) + imageData.data[pixelIndex+1] * weight;
@@ -518,8 +523,9 @@ async function main() {
         imageData.data[pixelIndex+1] = g;
         imageData.data[pixelIndex+2] = b;
     }
-    ctx.putImageData(imageData, 0, 0);
-    lastFrameImageData = ctx.getImageData(0, 0, imageWidth, imageHeight);
+    offscreenCtx.putImageData(imageData, 0, 0);
+    lastFrameImageData = offscreenCtx.getImageData(0, 0, imageWidth, imageHeight);
+    ctx.drawImage(offscreenCanvas, 0, 0, imageWidth, imageHeight, 0, 0, imageWidth, imageHeight);
 
     numFramesRendered++;
     requestAnimationFrame(main);
