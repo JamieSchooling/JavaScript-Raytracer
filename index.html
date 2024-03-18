@@ -80,7 +80,7 @@ class Vec3 {
 
 // A sphere in 3D space. Has centre, radius and colour all of which are Vec3s
 class Sphere {
-    constructor(centre, radius, material) {
+    constructor(centre, radius, material = new Material(new Vec3(1, 1, 1))) {
         this.centre = centre;
         this.radius = radius;
         this.material = material;
@@ -161,27 +161,8 @@ class Mesh {
     constructor(firstTriangleIndex, numTriangles, bounds, material) {
         this.firstTriangleIndex = firstTriangleIndex;
         this.numTriangles = numTriangles;
-        this.aabb = new AABB(bounds);
+        this.boundingSphere = bounds;
         this.material = material;
-    }
-}
-
-class AABB {
-    constructor(bounds) {
-        this.bounds = bounds;
-    }
-
-    rayIntersects(ray) {
-        let tMin = this.bounds[0].minus(ray.origin).multiply(ray.invDir);
-        let tMax = this.bounds[1].minus(ray.origin).multiply(ray.invDir);
-
-        let t1 = tMin.min(tMax);
-        let t2 = tMin.max(tMax);
-
-        let tNear = Math.max(Math.max(t1.x, t1.y), t1.z);
-        let tFar = Math.max(Math.max(t2.x, t2.y), t2.z);
-
-        return tNear <= tFar;
     }
 }
 
@@ -243,7 +224,7 @@ function traceRay(ray) {
     }
 
     for (let meshIndex = 0; meshIndex < meshes.length; meshIndex++) {
-        if (!meshes[meshIndex].aabb.rayIntersects(ray)) {
+        if (!meshes[meshIndex].boundingSphere.rayIntersects(ray)) {
             continue;
         }
 
@@ -370,7 +351,20 @@ function calculateMeshBounds(verts) {
             boundsMin.z = verts[i].z;
         }
     }
-    return [boundsMin, boundsMax];
+
+    let edgeX = boundsMax.x - boundsMin.x;
+    let edgeY = boundsMax.y - boundsMin.y;
+    let edgeZ = boundsMax.z - boundsMin.z;
+
+    let lowEdge = edgeX;
+    if (edgeZ > edgeX) {
+        lowEdge = edgeZ;
+    }
+    let faceHypSqr = (lowEdge * lowEdge) + (edgeY * edgeY);
+    let diameterSqr = (edgeY * edgeY) + faceHypSqr;
+    let radius = Math.sqrt(diameterSqr) / 2;
+
+    return new Sphere(new Vec3(boundsMin.x + (edgeX / 2), boundsMin.y + (edgeY / 2), boundsMin.z + (edgeZ / 2)), radius);
 }
 
 async function meshFromOBJ(objPath, colour) {
@@ -407,8 +401,8 @@ async function meshFromOBJ(objPath, colour) {
         }
     }
 
-    let bounds = calculateMeshBounds(verts);
-    let mesh = new Mesh(triangles.length, tris.length, bounds, colour)
+    let boundingSphere = calculateMeshBounds(verts);
+    let mesh = new Mesh(triangles.length, tris.length, boundingSphere, colour)
     triangles.push(...tris);
     return mesh;
 }
@@ -487,6 +481,7 @@ async function main() {
     meshes.push(await meshFromOBJ("scene_objects/cloud5.obj", new Material(new Vec3(1, 1, 1))));
     meshes.push(await meshFromOBJ("scene_objects/cloud6.obj", new Material(new Vec3(1, 1, 1))));
     meshes.push(await meshFromOBJ("scene_objects/cloud5.obj", new Material(new Vec3(1, 1, 1))));
+    // meshes.push(await meshFromOBJ("icosphere.obj", new Material(new Vec3(1, 1, 1))));
 
     for (let i = 0; i < imageWidth; i++)
     {
