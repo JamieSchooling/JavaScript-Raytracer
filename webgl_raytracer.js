@@ -4,12 +4,24 @@ precision mediump float;
 varying vec2 pixelPos;
 uniform vec3 ViewParams;
 uniform mat4 CamLocalToWorldMatrix;
-uniform vec3 LightDirection;
+uniform vec3 SunDirection;
+uniform float SunFocus;
+uniform float SunIntensity;
 
 struct Ray 
 {
     vec3 origin;
     vec3 direction;
+};
+
+struct Material
+{
+    vec3 colour;
+    float smoothness;
+    float specularProbability;
+    vec3 specularColour;
+    vec3 emissionColour;
+    float emissionStrength;
 };
 
 struct RaycastResult 
@@ -18,14 +30,14 @@ struct RaycastResult
     vec3 position;
     vec3 normal;
     float t;
-    vec3 colour;
+    Material material;
 };
 
 struct Sphere
 {
     vec3 position;
     float radius;
-    vec3 colour;
+    Material material;
 };
 uniform Sphere spheres[{spheresLength}];
 
@@ -57,6 +69,32 @@ RaycastResult RaySphere(Ray ray, vec3 sphereCentre, float sphereRadius)
     return hit;
 }
 
+float Random(vec2 co)
+{
+    return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+float RandomValueNormalDistribution(vec2 co) 
+{
+    float theta = 2.0 * 3.14159265359 * Random(co);
+    float rho = sqrt(-2.0 * log(1.0 - Random(co)));
+    return rho * cos(theta);
+}
+
+vec3 RandomDirection(vec2 co) 
+{
+    float x = RandomValueNormalDistribution(co);
+    float y = RandomValueNormalDistribution(co);
+    float z = RandomValueNormalDistribution(co);
+    return normalize(vec3(x, y, z));
+}
+
+vec2 RandomPointInCircle(vec2 co)
+{
+    float angle = Random(co) * 2.0 * 3.14159265359;
+    vec2 pointOnCircle = vec2(cos(angle), sin(angle));
+    return pointOnCircle * sqrt(Random(co));
+}
 
 RaycastResult TraceRay(Ray ray) 
 {
@@ -69,7 +107,7 @@ RaycastResult TraceRay(Ray ray)
 
         if (raycastResult.didHit && raycastResult.t < closestHit.t) {
             closestHit = raycastResult;
-            closestHit.colour = sphere.colour;
+            closestHit.material = sphere.material;
         }
     }
 
@@ -78,36 +116,58 @@ RaycastResult TraceRay(Ray ray)
 
 vec3 GetEnvironmentLight(Ray ray)
 {
-    vec3 white = vec3(1, 1, 1);
-    vec3 blue = vec3(0.3, 0.5, 0.9);
-    float t = 0.5 * (ray.direction.y + 1.0);
-    return mix(white, blue, t);
+    vec3 skyColourHorizon = vec3(1, 1, 1);
+    vec3 skyColourZenith = vec3(0.3, 0.5, 0.9);
+    vec3 groundColour = vec3(0.2, 0.2, 0.2);
+    
+    float skyGradientT = pow(smoothstep(0.0, 0.4, ray.direction.y), 0.35);
+    vec3 skyGradient = mix(skyColourHorizon, skyColourZenith, skyGradientT);
+    float sun = pow(max(0.0, dot(ray.direction, -SunDirection)), SunFocus) * SunIntensity;
+
+    float groundToSkyT = smoothstep(-0.15, 0.0, ray.direction.y);
+    bool sunMask = groundToSkyT >= 1.0;   
+
+    return mix(groundColour, skyGradient, groundToSkyT) + sun * float(sunMask);
 }
 
-vec3 RayColour(Ray ray)
+vec3 RayColour(Ray ray, vec2 co)
 {
-    RaycastResult castResult = TraceRay(ray);
-    if (!castResult.didHit) return GetEnvironmentLight(ray);
+    vec3 incomingLight = vec3(0, 0, 0);
+    vec3 rayColour = vec3(1, 1, 1);
 
-    float diffuse = max(dot(castResult.normal, -LightDirection), 0.0);
-    vec3 colour = vec3(diffuse, diffuse, diffuse) * castResult.colour;
+    for (int i = 0; i < 3; i++) 
+    {
+        RaycastResult castResult = TraceRay(ray);
+        Material material = castResult.material;
 
-    return colour;
+        if (!castResult.didHit) incomingLight += GetEnvironmentLight(ray) * rayColour;
+
+        ray.origin = castResult.position;
+        vec3 diffuseDirection = normalize(castResult.normal + RandomDirection(co));
+        ray.direction = diffuseDirection;
+
+        vec3 emittedLight = material.emissionColour * material.emissionStrength;
+        incomingLight += emittedLight * rayColour;
+    }
+
+    return incomingLight;
 }
 
-void main() 
+void main()
 {
     vec3 viewPointLocal = vec3(pixelPos.xy - 0.5, 1) * ViewParams;
     vec4 viewPoint = CamLocalToWorldMatrix * vec4(viewPointLocal, 1);
 
-    Ray ray;
-    ray.origin = vec3(0, 0, 0);
-    ray.direction = normalize(viewPoint.xyz - ray.origin);
+    vec3 colour;
+    for (int i = 0; i < 30; i++) {
+        Ray ray;
+        ray.origin = vec3(0, 0, 0);
+        ray.direction = normalize(viewPoint.xyz - ray.origin);
+        colour += RayColour(ray, pixelPos);
+    }
+    colour = colour / 30.0;
 
-    gl_FragColor = vec4(RayColour(ray), 1.0);
-
-
-    //gl_FragColor = vec4(pixelPos.xy, 0.0, 1.0);
+    gl_FragColor = vec4(colour, 1.0);
 }
 `
 
@@ -201,7 +261,9 @@ let camForward = [0, 0, -1];
 let fov = 60;
 let focusDistance = 1;
 
-let lightDirection = new Vec3(-1.1, -1.3, -1.5).normalised();
+let sunDirection = new Vec3(-1.1, -1.3, -1.5).normalised();
+let sunIntensity = 5;
+let sunFocus = 500;
 
 function updateCameraParams(camPos, fov, focusDistance, aspectRatio) {
     let viewParamsLocation = gl.getUniformLocation(program, "ViewParams");
@@ -214,22 +276,28 @@ function updateCameraParams(camPos, fov, focusDistance, aspectRatio) {
             camRight[0], camRight[1], camRight[2], 0, 
             camUp[0], camUp[1], camUp[2], 0,
             camForward[0], camForward[1], camForward[2], 0,
-            camPosition[0], camPosition[1], camPosition[2], 1,
+            camPos[0], camPos[1], camPos[2], 1,
         ]
     );
-    let lightDirectionLocation = gl.getUniformLocation(program, "LightDirection");
-    gl.uniform3fv(lightDirectionLocation, [lightDirection.x, lightDirection.y, lightDirection.z]);
+}
+
+function updateLightParams(sunDirection, sunIntensity, sunFocus) {
+    let sunDirectionLocation = gl.getUniformLocation(program, "SunDirection");
+    let sunIntensityLocation = gl.getUniformLocation(program, "SunIntensity");
+    let sunFocusLocation = gl.getUniformLocation(program, "SunFocus");
+    gl.uniform3fv(sunDirectionLocation, [sunDirection.x, sunDirection.y, sunDirection.z]);
+    gl.uniform1f(sunIntensityLocation, sunIntensity);
+    gl.uniform1f(sunFocusLocation, sunFocus);
 }
 
 let spheresLocations = []; 
-
 
 
 for (let i = 0; i < spheres.length; i++) {
     spheresLocations.push({
         position: gl.getUniformLocation(program, `spheres[${i}].position`),
         radius: gl.getUniformLocation(program, `spheres[${i}].radius`),
-        colour: gl.getUniformLocation(program, `spheres[${i}].colour`),
+        colour: gl.getUniformLocation(program, `spheres[${i}].material.colour`),
     });
 }
 
@@ -243,6 +311,7 @@ function setSpheres(spheres) {
 
 setSpheres(spheres);
 updateCameraParams(camPosition, fov, focusDistance, aspectRatio);
+updateLightParams(sunDirection, sunIntensity, sunFocus);
 
 gl.drawArrays(gl.TRIANGLES, 0, 6);
 
