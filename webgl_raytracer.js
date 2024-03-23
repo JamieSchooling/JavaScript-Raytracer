@@ -42,13 +42,6 @@ struct RayTracingMaterial
     vec3 specularColour;
 };
 
-struct Sphere
-{
-    vec3 position;
-    float radius;
-    RayTracingMaterial material;
-};
-
 struct Triangle
 {
     vec3 posA, posB, posC;
@@ -65,10 +58,27 @@ struct HitInfo
 };
 
 uniform int NumSpheres;
-uniform Sphere Spheres[MAX_SPHERES];
+uniform sampler2D SphereGeometryTex;
+uniform vec2 SphereGeometryTexSize;
+
+uniform sampler2D SphereMatsTex;
+uniform vec2 SphereMatsTexSize;
 
 uniform int NumTris;
-uniform Triangle Triangles[MAX_TRIS];
+
+uniform sampler2D TrianglesInfoTex;
+uniform vec2 TrianglesInfoTexSize;
+
+vec4 texelFetch(sampler2D tex, vec2 texSize, vec2 pixelCoord) {
+    vec2 uv = (pixelCoord + 0.5) / texSize;
+    return texture(tex, uv);
+}
+
+vec4 getValueByIndexFromTexture(sampler2D tex, vec2 texSize, float index) {
+    float col = mod(index, texSize.x);
+    float row = floor(index / texSize.x);
+    return texelFetch(tex, texSize, vec2(col, row));
+}
 
 HitInfo RaySphere(Ray ray, vec3 sphereCentre, float sphereRadius)
 {
@@ -145,25 +155,52 @@ HitInfo TraceRay(Ray ray)
     {
         if (i == NumSpheres) break;
 
-        Sphere sphere = Spheres[i];
-        HitInfo hitInfo = RaySphere(ray, sphere.position, sphere.radius);
+        vec4 sphereInfo = getValueByIndexFromTexture(SphereGeometryTex, SphereGeometryTexSize, float(i));
+
+        vec4 colourSmoothness = getValueByIndexFromTexture(SphereMatsTex, SphereMatsTexSize, float(i * 3));
+        vec4 emission = getValueByIndexFromTexture(SphereMatsTex, SphereMatsTexSize, float((i * 3) + 1));
+        vec4 specular = getValueByIndexFromTexture(SphereMatsTex, SphereMatsTexSize, float((i * 3) + 2));
+        
+        RayTracingMaterial material;
+        material.colour = colourSmoothness.rgb;
+        material.smoothness = colourSmoothness.a;
+
+        material.emissionColour = emission.rgb;
+        material.emissionStrength = emission.a;
+
+        material.specularColour = specular.rgb;
+        material.specularProbability = specular.a;
+        
+        HitInfo hitInfo = RaySphere(ray, sphereInfo.xyz, sphereInfo.w);
 
         if (hitInfo.didHit && hitInfo.dst < closestHit.dst) 
         {
             closestHit = hitInfo;
-            closestHit.material = sphere.material;
+            
+            closestHit.material = material;
         }
     }
 
     for (int i = 0; i < MAX_TRIS; i++) 
     {
         if (i == NumTris) break;
-        
-        Triangle triangle = Triangles[i];
+
+        Triangle triangle;
+        triangle.posA = getValueByIndexFromTexture(TrianglesInfoTex, TrianglesInfoTexSize, float(i*6)).xyz;
+        triangle.posB = getValueByIndexFromTexture(TrianglesInfoTex, TrianglesInfoTexSize, float(i*6 + 1)).xyz;
+        triangle.posC = getValueByIndexFromTexture(TrianglesInfoTex, TrianglesInfoTexSize, float(i*6 + 2)).xyz;
+
+        triangle.normalA = getValueByIndexFromTexture(TrianglesInfoTex, TrianglesInfoTexSize, float(i*6 + 3)).xyz;
+        triangle.normalB = getValueByIndexFromTexture(TrianglesInfoTex, TrianglesInfoTexSize, float(i*6 + 4)).xyz;
+        triangle.normalC = getValueByIndexFromTexture(TrianglesInfoTex, TrianglesInfoTexSize, float(i*6 + 5)).xyz;
+
         HitInfo hitInfo = RayTriangle(ray, triangle);
+
         if (hitInfo.didHit && hitInfo.dst < closestHit.dst) {
             closestHit = hitInfo;
+            closestHit.material.colour = vec3(1, 1, 1);
         }
+
     }
 
     return closestHit;
@@ -430,29 +467,33 @@ function updateLightParams() {
 function setSpheres() {
     let numSpheresLocation = gl.getUniformLocation(raytraceProgram, "NumSpheres");
     gl.uniform1i(numSpheresLocation, spheres.length);
-    for (let i = 0; i < spheres.length; i++) {
-        gl.uniform3fv(spheresLocations[i].position, [spheres[i].centre.x, spheres[i].centre.y, spheres[i].centre.z]);
-        gl.uniform1f(spheresLocations[i].radius, spheres[i].radius);
-        gl.uniform3fv(spheresLocations[i].colour, [spheres[i].material.colour.x, spheres[i].material.colour.y, spheres[i].material.colour.z]);
-        gl.uniform3fv(spheresLocations[i].emissionColour, [spheres[i].material.emissionColour.x, spheres[i].material.emissionColour.y, spheres[i].material.emissionColour.z]);
-        gl.uniform1f(spheresLocations[i].emissionStrength, spheres[i].material.emissionStrength);
-        gl.uniform1f(spheresLocations[i].smoothness, spheres[i].material.smoothness);
-        gl.uniform1f(spheresLocations[i].specularProbability, spheres[i].material.specularProbability);
-        gl.uniform3fv(spheresLocations[i].specularColour, [spheres[i].material.specularColour.x, spheres[i].material.specularColour.y, spheres[i].material.specularColour.z]);
-    }
+
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, spheresInfoTex);
+    let sphereGeometryTexLocation = gl.getUniformLocation(raytraceProgram, "SphereGeometryTex");
+    gl.uniform1i(sphereGeometryTexLocation, 1);
+    let sphereGeometryTexSizeLoc = gl.getUniformLocation(raytraceProgram, "SphereGeometryTexSize");
+    gl.uniform2f(sphereGeometryTexSizeLoc, spheresInfo.length / 4, 1);
+    
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, sphereMatsTex);
+    let sphereMatsTexLocation = gl.getUniformLocation(raytraceProgram, "SphereMatsTex");
+    gl.uniform1i(sphereMatsTexLocation, 2);
+    let sphereMatsTexSizeLoc = gl.getUniformLocation(raytraceProgram, "SphereMatsTexSize");
+    gl.uniform2f(sphereMatsTexSizeLoc, sphereMaterials.length / 4, 1);
+
 }
 
 function setTriangles() {
     let numTrisLocation = gl.getUniformLocation(raytraceProgram, "NumTris");
     gl.uniform1i(numTrisLocation, triangles.length);
-    for (let i = 0; i < triangles.length; i++) {
-        gl.uniform3fv(trianglesLocations[i].posA, [triangles[i].posA.x, triangles[i].posA.y, triangles[i].posA.z]);
-        gl.uniform3fv(trianglesLocations[i].posB, [triangles[i].posB.x, triangles[i].posB.y, triangles[i].posB.z]);
-        gl.uniform3fv(trianglesLocations[i].posC, [triangles[i].posC.x, triangles[i].posC.y, triangles[i].posC.z]);
-        gl.uniform3fv(trianglesLocations[i].normalA, [triangles[i].normalA.x, triangles[i].normalA.y, triangles[i].normalA.z]);
-        gl.uniform3fv(trianglesLocations[i].normalB, [triangles[i].normalB.x, triangles[i].normalB.y, triangles[i].normalB.z]);
-        gl.uniform3fv(trianglesLocations[i].normalC, [triangles[i].normalC.x, triangles[i].normalC.y, triangles[i].normalC.z]);
-    }
+
+    gl.activeTexture(gl.TEXTURE3);
+    gl.bindTexture(gl.TEXTURE_2D, trianglesInfoTex);
+    let trianglesInfoTexLoc = gl.getUniformLocation(raytraceProgram, "TrianglesInfoTex");
+    gl.uniform1i(trianglesInfoTexLoc, 3);
+    let trianglesInfoTexSizeLoc = gl.getUniformLocation(raytraceProgram, "TrianglesInfoTexSize");
+    gl.uniform2f(trianglesInfoTexSizeLoc, triangleInfo.length / 3, 1);
 }
 
 let imageWidth = canvas.width;
@@ -480,44 +521,113 @@ const spheres = [
     new Sphere(new Vec3(-0.5, -0.2, 2), 0.3, new Material(new Vec3(1, 0, 0), new Vec3(1, 1, 1), 0, 1, 0.1)),       // Red sphere
     new Sphere(new Vec3(0.3,-0.35, 1.8), 0.15, new Material(new Vec3(0,0,1), new Vec3(1, 1, 1), 0, 1, 0.1)),  // Blue sphere
     new Sphere(new Vec3(0,-100.5, 2), 100, new Material(new Vec3(.7,.1,.7))),    // Big sphere
-
-    new Sphere(new Vec3(0, -0.45, 1.5), 0.05, new Material(new Vec3(0, 0, 0))),
-    new Sphere(new Vec3(-0.5, -0.45, 1), 0.05, new Material(new Vec3(0, 0, 0))),
-    new Sphere(new Vec3(0.5, -0.45, 1), 0.05, new Material(new Vec3(0, 0, 0))),
 ];
-let spheresLocations = [];
-for (let i = 0; i < spheres.length; i++) {
-    spheresLocations.push({
-        position: gl.getUniformLocation(raytraceProgram, `Spheres[${i}].position`),
-        radius: gl.getUniformLocation(raytraceProgram, `Spheres[${i}].radius`),
-        colour: gl.getUniformLocation(raytraceProgram, `Spheres[${i}].material.colour`),
-        emissionColour: gl.getUniformLocation(raytraceProgram, `Spheres[${i}].material.emissionColour`),
-        emissionStrength: gl.getUniformLocation(raytraceProgram, `Spheres[${i}].material.emissionStrength`),
-        smoothness: gl.getUniformLocation(raytraceProgram, `Spheres[${i}].material.smoothness`),
-        specularProbability: gl.getUniformLocation(raytraceProgram, `Spheres[${i}].material.specularProbability`),
-        specularColour: gl.getUniformLocation(raytraceProgram, `Spheres[${i}].material.specularColour`),
-    });
+let spheresInfo = [];
+let sphereMaterials = [];
+for (let i = 0; i < spheres.length; i++)
+{
+    spheresInfo.push(spheres[i].centre.x);
+    spheresInfo.push(spheres[i].centre.y);
+    spheresInfo.push(spheres[i].centre.z);
+    spheresInfo.push(spheres[i].radius);
+    
+    sphereMaterials.push(spheres[i].material.colour.x);
+    sphereMaterials.push(spheres[i].material.colour.y);
+    sphereMaterials.push(spheres[i].material.colour.z);
+    sphereMaterials.push(spheres[i].material.smoothness);
+    
+    sphereMaterials.push(spheres[i].material.emissionColour.x);
+    sphereMaterials.push(spheres[i].material.emissionColour.y);
+    sphereMaterials.push(spheres[i].material.emissionColour.z);
+    sphereMaterials.push(spheres[i].material.emissionStrength);
+    
+    sphereMaterials.push(spheres[i].material.specularColour.x);
+    sphereMaterials.push(spheres[i].material.specularColour.y);
+    sphereMaterials.push(spheres[i].material.specularColour.z);
+    sphereMaterials.push(spheres[i].material.specularProbability);
 }
+let spheresInfoTex = makeDataTexture(gl, spheresInfo, 4);
+let sphereMatsTex = makeDataTexture(gl, sphereMaterials, 4);
 
 const triangles = [
     new Triangle(
-        new Vec3(0, -0.45, 1.5), new Vec3(-0.5, -0.45, 1), new Vec3(0.5, -0.45, 1),
-        new Vec3(0, 0, 0), new Vec3(0, 1, 0), new Vec3(0, 1, 0),
+        new Vec3(-0.5, -0.45, 1.5), new Vec3(-1, -0.45, 1), new Vec3(0, -0.45, 1),
+        new Vec3(0, 1, 0), new Vec3(0, 1, 0), new Vec3(0, 1, 0),
+    ),
+    new Triangle(
+        new Vec3(0.5, -0.35, 1.5), new Vec3(0, -0.35, 1), new Vec3(1, -0.35, 1),
+        new Vec3(0, 1, 0), new Vec3(0, 1, 0), new Vec3(0, 1, 0),
+    ),
+    new Triangle(
+        new Vec3(0.5, 0.35, 1.5), new Vec3(0, 0.35, 1), new Vec3(1, 0.35, 1),
+        new Vec3(0, 1, 0), new Vec3(0, 1, 0), new Vec3(0, 1, 0),
+    ),
+    new Triangle(
+        new Vec3(0.2, 0.3, 2.5), new Vec3(-0.3, 0.3, 2), new Vec3(0.7, 0.3, 2),
+        new Vec3(0, 1, 0), new Vec3(0, 1, 0), new Vec3(0, 1, 0),
     ),
 ];
-let trianglesLocations = [];
+
+let triangleInfo = [];
 for (let i = 0; i < triangles.length; i++) {
-    trianglesLocations.push({
-        posA: gl.getUniformLocation(raytraceProgram, `Triangles[${i}].posA`),
-        posB: gl.getUniformLocation(raytraceProgram, `Triangles[${i}].posB`),
-        posC: gl.getUniformLocation(raytraceProgram, `Triangles[${i}].posC`),
-        normalA: gl.getUniformLocation(raytraceProgram, `Triangles[${i}].normalA`),
-        normalB: gl.getUniformLocation(raytraceProgram, `Triangles[${i}].normalB`),
-        normalC: gl.getUniformLocation(raytraceProgram, `Triangles[${i}].normalC`),
-    });
+    triangleInfo.push(triangles[i].posA.x);
+    triangleInfo.push(triangles[i].posA.y);
+    triangleInfo.push(triangles[i].posA.z);
+
+    triangleInfo.push(triangles[i].posB.x);
+    triangleInfo.push(triangles[i].posB.y);
+    triangleInfo.push(triangles[i].posB.z);
+    
+    triangleInfo.push(triangles[i].posC.x);
+    triangleInfo.push(triangles[i].posC.y);
+    triangleInfo.push(triangles[i].posC.z);
+
+    triangleInfo.push(triangles[i].normalA.x);
+    triangleInfo.push(triangles[i].normalA.y);
+    triangleInfo.push(triangles[i].normalA.z);
+    
+    triangleInfo.push(triangles[i].normalB.x);
+    triangleInfo.push(triangles[i].normalB.y);
+    triangleInfo.push(triangles[i].normalB.z);
+
+    triangleInfo.push(triangles[i].normalC.x);
+    triangleInfo.push(triangles[i].normalC.y);
+    triangleInfo.push(triangles[i].normalC.z);
 }
+let trianglesInfoTex = makeDataTexture(gl, triangleInfo, 3);
 
-
+function makeDataTexture(gl, data, numComponents) {
+    // expand the data to 4 values per pixel.
+    const numElements = data.length / numComponents;
+    const expandedData = new Float32Array(numElements * 4);
+    for (let i = 0; i < numElements; ++i) {
+        const srcOff = i * numComponents;
+        const dstOff = i * 4;
+        for (let j = 0; j < numComponents; ++j) {
+        expandedData[dstOff + j] = data[srcOff + j];
+        }
+    }
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,            // mip level
+        gl.RGBA32F,      // format
+        numElements,  // width
+        1,            // height
+        0,            // border
+        gl.RGBA,      // format
+        gl.FLOAT,     // type
+        expandedData,
+    );
+    // make it possible to use a non-power-of-2 texture and
+    // we don't need any filtering
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    return tex;
+}
 
 // Create (empty) texture for raytracer output
 const textureA = gl.createTexture();
