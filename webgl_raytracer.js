@@ -7,13 +7,14 @@ const float PI = 3.141592653589793;
 const int MAX_SPHERES = 10000;
 const int MAX_TRIS = 10000;
 const int MAX_MESHES = 10000;
-const int MAX_BOUNCE_COUNT = 3;
-const float PIXEL_SAMPLE_COUNT = 16.0;
+const int MAX_BOUNCE_COUNT = 4;
+const float PIXEL_SAMPLE_COUNT = 32.0;
 
 uniform vec2 ScreenParams;
 uniform vec3 ViewParams;
 uniform mat4 CamLocalToWorldMatrix;
 uniform vec3 WorldSpaceCameraPos;
+uniform float DivergeStrength;
 
 uniform vec3 SunDirection;
 uniform float SunFocus;
@@ -77,6 +78,8 @@ uniform vec2 SphereMatsTexSize;
 uniform int NumMeshes;
 uniform sampler2D MeshInfoTex;
 uniform vec2 MeshInfoTexSize;
+uniform sampler2D MeshMatsTex;
+uniform vec2 MeshMatsTexSize;
 
 uniform sampler2D TrianglesInfoTex;
 uniform vec2 TrianglesInfoTexSize;
@@ -221,6 +224,19 @@ HitInfo TraceRay(Ray ray)
             continue;
         }
         
+        vec4 colourSmoothness = getValueByIndexFromTexture(MeshMatsTex, MeshMatsTexSize, float(meshIndex * 3));
+        vec4 emission = getValueByIndexFromTexture(MeshMatsTex, MeshMatsTexSize, float((meshIndex * 3) + 1));
+        vec4 specular = getValueByIndexFromTexture(MeshMatsTex, MeshMatsTexSize, float((meshIndex * 3) + 2));
+        
+        RayTracingMaterial material;
+        material.colour = colourSmoothness.rgb;
+        material.smoothness = colourSmoothness.a;
+
+        material.emissionColour = emission.rgb;
+        material.emissionStrength = emission.a;
+
+        material.specularColour = specular.rgb;
+        material.specularProbability = specular.a;
 
         for (int i = 0; i < MAX_TRIS; i++)
         {
@@ -240,7 +256,7 @@ HitInfo TraceRay(Ray ray)
 
             if (hitInfo.didHit && hitInfo.dst < closestHit.dst) {
                 closestHit = hitInfo;
-                closestHit.material.colour = vec3(1, 1, 1);
+                closestHit.material = material;
             }
         }       
     }
@@ -276,6 +292,13 @@ vec3 RandomDirection(inout uint rngState)
     float y = RandomValueNormalDistribution(rngState);
     float z = RandomValueNormalDistribution(rngState);
     return normalize(vec3(x, y, z));
+}
+
+vec2 RandomPointInCircle(inout uint rngState)
+{
+    float angle = Random(rngState) * 2.0 * PI;
+    vec2 pointOnCircle = vec2(cos(angle), sin(angle));
+    return pointOnCircle * sqrt(Random(rngState));
 }
 
 vec3 GetEnvironmentLight(Ray ray)
@@ -327,22 +350,25 @@ uniform sampler2D BaseImage;
 void main() 
 {
     // Create seed for random number generator
-    uvec2 numPixels = uvec2(ScreenParams.xy);
-    uvec2 pixelCoord = uvec2(pixelPos) * numPixels;
-    uint pixelIndex = pixelCoord.y * numPixels.x + pixelCoord.x;
+    uvec2 pixelCoord = uvec2(pixelPos) * uvec2(ScreenParams);
+    uint pixelIndex = pixelCoord.y * uint(ScreenParams.x) + pixelCoord.x;
     uint rngState = pixelIndex + uint(Frame) * 719393u;
 
     vec3 viewPointLocal = vec3(pixelPos - 0.5, 1.0) * ViewParams;
     vec4 viewPoint = CamLocalToWorldMatrix * vec4(viewPointLocal, 1.0);
+    vec3 camRight = CamLocalToWorldMatrix[0].xyz;
+    vec3 camUp = CamLocalToWorldMatrix[1].xyz;
 
     Ray ray;
     ray.origin = WorldSpaceCameraPos;
-    ray.dir = normalize(viewPoint.xyz - ray.origin); 
-
+    
     vec3 totalIncomingLight = vec3(0.0);
-
+    
     for (float i = 0.0; i < PIXEL_SAMPLE_COUNT;  i++)
     {
+        vec2 jitter = RandomPointInCircle(rngState) * DivergeStrength / ScreenParams.x;
+        vec3 jitteredFocusPoint = viewPoint.xyz + camRight * jitter.x + camUp * jitter.y;
+        ray.dir = normalize(jitteredFocusPoint - ray.origin); 
         totalIncomingLight += RayColour(ray, rngState);
     }
     vec3 pixelColour = totalIncomingLight / PIXEL_SAMPLE_COUNT;
@@ -483,6 +509,9 @@ function updateCameraParams() {
     );
     let worldSpaceCameraPosLocation = gl.getUniformLocation(raytraceProgram, "WorldSpaceCameraPos");
     gl.uniform3fv(worldSpaceCameraPosLocation, [camPosition.x, camPosition.y, camPosition.z]);
+
+    let divergeStrengthLocation = gl.getUniformLocation(raytraceProgram, "DivergeStrength");
+    gl.uniform1f(divergeStrengthLocation, divergeStrength);
 }
 
 function updateScreenParams() {
@@ -546,17 +575,26 @@ function setMeshes() {
     gl.uniform1i(meshInfoTexLoc, 4);
     let meshInfoTexSizeLoc = gl.getUniformLocation(raytraceProgram, "MeshInfoTexSize");
     gl.uniform2f(meshInfoTexSizeLoc, meshInfo.length / 4, 1);
+
+    gl.activeTexture(gl.TEXTURE5);
+    gl.bindTexture(gl.TEXTURE_2D, meshMatsTex);
+    let meshMatsTexLocation = gl.getUniformLocation(raytraceProgram, "MeshMatsTex");
+    gl.uniform1i(meshMatsTexLocation, 5);
+    let meshMatsTexSizeLoc = gl.getUniformLocation(raytraceProgram, "MeshMatsTexSize");
+    gl.uniform2f(meshMatsTexSizeLoc, meshMaterials.length / 4, 1);
 }
 
 let imageWidth = canvas.width;
 let imageHeight = canvas.height;
 let aspectRatio = imageHeight / imageWidth;
 
-let camPosition = new Vec3(0, 0, 1);
+let camPosition = new Vec3(0, 0, 0);
 let camUp = new Vec3(0, 1, 0);
 let camRight = new Vec3(1, 0, 0);
 let camForward = new Vec3(0, 0, -1);
-let fov = 60;
+let fov = 40;
+let divergeStrength = 1;
+let defocusStrength = 1;
 let focusDistance = 1;
 
 let sunDirection  = new Vec3(0.6, 0.5, -1).normalised();
@@ -570,9 +608,9 @@ let groundColour = new Vec3(0.2, 0.2, 0.2);
 initWebGL();
 
 const spheres = [
-    new Sphere(new Vec3(-0.5, -0.2, 2), 0.3, new Material(new Vec3(1, 0, 0), new Vec3(1, 1, 1), 0, 1, 0.1)),       // Red sphere
-    new Sphere(new Vec3(0.3,-0.35, 1.8), 0.15, new Material(new Vec3(0,0,1), new Vec3(1, 1, 1), 0, 1, 0.1)),  // Blue sphere
-    new Sphere(new Vec3(0,-100.5, 2), 100, new Material(new Vec3(.7,.1,.7))),    // Big sphere
+    // new Sphere(new Vec3(-0.5, -0.2, 2), 0.3, new Material(new Vec3(1, 0, 0), new Vec3(1, 1, 1), 0, 1, 0.1)),       // Red sphere
+    // new Sphere(new Vec3(0.3,-0.35, 1.8), 0.15, new Material(new Vec3(0,0,1), new Vec3(1, 1, 1), 0, 1, 0.1)),  // Blue sphere
+    // new Sphere(new Vec3(0,-100.5, 2), 100, new Material(new Vec3(.7,.1,.7))),    // Big sphere
 ];
 let spheresInfo = [];
 let sphereMaterials = [];
@@ -716,9 +754,30 @@ let triangleInfo = [];
 let trianglesInfoTex;
 
 let meshInfo = [];
+let meshMaterials = [];
 let meshInfoTex;
+let meshMatsTex;
 async function initMeshes() {
-    meshes.push(await OBJLoader.meshFromOBJ("resources/test_objects/cube.obj", triangles, new Material(new Vec3(1, 1, 1))));  
+    meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/light_left.obj", triangles, new Material(new Vec3(0, 0, 0), new Vec3(1, 1, 1), 6.5, 0, 0, new Vec3(0, 0, 0), )));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/light_right.obj", triangles, new Material(new Vec3(0, 0, 0), new Vec3(1, 1, 1), 6.5, 0, 0, new Vec3(0, 0, 0))));
+    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/grass.obj", triangles, new Material(new Vec3(0.108, 0.576, 0.060))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/river.obj", triangles, new Material(new Vec3(0.155, 0.534, 0.793))));
+    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/mountain.obj", triangles, new Material(new Vec3(0.145, 0.145, 0.145))));
+    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/tree1.obj", triangles, new Material(new Vec3(0.145, 0.048, 0.010))));
+    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/tree2.obj", triangles, new Material(new Vec3(0.145, 0.048, 0.010))));
+    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/tree3.obj", triangles, new Material(new Vec3(0.145, 0.048, 0.010))));
+    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/leaves1.obj", triangles, new Material(new Vec3(0.108, 0.576, 0.060))));
+    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/leaves2.obj", triangles, new Material(new Vec3(0.108, 0.576, 0.060))));
+    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/leaves3.obj", triangles, new Material(new Vec3(0.995, 0.170, 0))));
+    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/cloud1.obj", triangles, new Material(new Vec3(1, 1, 1))));
+    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/cloud2.obj", triangles, new Material(new Vec3(1, 1, 1))));
+    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/cloud3.obj", triangles, new Material(new Vec3(1, 1, 1))));
+    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/cloud4.obj", triangles, new Material(new Vec3(1, 1, 1))));
+    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/cloud5.obj", triangles, new Material(new Vec3(1, 1, 1))));
+    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/cloud6.obj", triangles, new Material(new Vec3(1, 1, 1))));
+    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/cloud5.obj", triangles, new Material(new Vec3(1, 1, 1))));
+
+    // meshes.push(await OBJLoader.meshFromOBJ("resources/test_objects/cube.obj", triangles, new Material(new Vec3(1, 1, 1))));  
 
     for (let i = 0; i < triangles.length; i++) {
         triangleInfo.push(triangles[i].posA.x);
@@ -757,8 +816,24 @@ async function initMeshes() {
         meshInfo.push(meshes[i].max.y);
         meshInfo.push(meshes[i].max.z);
         meshInfo.push(meshes[i].numTriangles);
+
+        meshMaterials.push(meshes[i].material.colour.x);
+        meshMaterials.push(meshes[i].material.colour.y);
+        meshMaterials.push(meshes[i].material.colour.z);
+        meshMaterials.push(meshes[i].material.smoothness);
+        
+        meshMaterials.push(meshes[i].material.emissionColour.x);
+        meshMaterials.push(meshes[i].material.emissionColour.y);
+        meshMaterials.push(meshes[i].material.emissionColour.z);
+        meshMaterials.push(meshes[i].material.emissionStrength);
+        
+        meshMaterials.push(meshes[i].material.specularColour.x);
+        meshMaterials.push(meshes[i].material.specularColour.y);
+        meshMaterials.push(meshes[i].material.specularColour.z);
+        meshMaterials.push(meshes[i].material.specularProbability);
     }
     meshInfoTex = makeDataTexture(gl, meshInfo, 4);
+    meshMatsTex = makeDataTexture(gl, meshMaterials, 4);
 
     render();
 }
