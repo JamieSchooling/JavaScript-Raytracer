@@ -7,8 +7,8 @@ const float PI = 3.141592653589793;
 const int MAX_SPHERES = 10000;
 const int MAX_TRIS = 10000;
 const int MAX_MESHES = 10000;
-const int MAX_BOUNCE_COUNT = 4;
-const float PIXEL_SAMPLE_COUNT = 32.0;
+const int MAX_BOUNCE_COUNT = 3;
+const float PIXEL_SAMPLE_COUNT = 96.0;
 
 uniform vec2 ScreenParams;
 uniform vec3 ViewParams;
@@ -758,10 +758,10 @@ let meshMaterials = [];
 let meshInfoTex;
 let meshMatsTex;
 async function initMeshes() {
-    meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/light_left.obj", triangles, new Material(new Vec3(0, 0, 0), new Vec3(1, 1, 1), 6.5, 0, 0, new Vec3(0, 0, 0), )));
-    meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/light_right.obj", triangles, new Material(new Vec3(0, 0, 0), new Vec3(1, 1, 1), 6.5, 0, 0, new Vec3(0, 0, 0))));
+    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/light_left.obj", triangles, new Material(new Vec3(0, 0, 0), new Vec3(1, 1, 1), 6.5, 0, 0, new Vec3(0, 0, 0), )));
+    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/light_right.obj", triangles, new Material(new Vec3(0, 0, 0), new Vec3(1, 1, 1), 6.5, 0, 0, new Vec3(0, 0, 0))));
     // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/grass.obj", triangles, new Material(new Vec3(0.108, 0.576, 0.060))));
-    meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/river.obj", triangles, new Material(new Vec3(0.155, 0.534, 0.793))));
+    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/river.obj", triangles, new Material(new Vec3(0.155, 0.534, 0.793))));
     // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/mountain.obj", triangles, new Material(new Vec3(0.145, 0.145, 0.145))));
     // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/tree1.obj", triangles, new Material(new Vec3(0.145, 0.048, 0.010))));
     // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/tree2.obj", triangles, new Material(new Vec3(0.145, 0.048, 0.010))));
@@ -778,6 +778,14 @@ async function initMeshes() {
     // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/cloud5.obj", triangles, new Material(new Vec3(1, 1, 1))));
 
     // meshes.push(await OBJLoader.meshFromOBJ("resources/test_objects/cube.obj", triangles, new Material(new Vec3(1, 1, 1))));  
+    
+    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_light.obj", triangles, new Material(new Vec3(0, 0, 0), new Vec3(1, 1, 1), 35)));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_top_bottom.obj", triangles, new Material(new Vec3(1, 1, 1))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_left.obj", triangles, new Material(new Vec3(1, 0, 0))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_right.obj", triangles, new Material(new Vec3(0, 1, 0))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_back.obj", triangles, new Material(new Vec3(1, 1, 1))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_cube_small.obj", triangles, new Material(new Vec3(1, 1, 1))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_cube_tall.obj", triangles, new Material(new Vec3(1, 1, 1))));
 
     for (let i = 0; i < triangles.length; i++) {
         triangleInfo.push(triangles[i].posA.x);
