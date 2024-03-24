@@ -4,9 +4,9 @@ precision mediump float;
 in vec2 pixelPos;
 
 const float PI = 3.141592653589793;
-const int MAX_SPHERES = 100;
-const int MAX_TRIS = 100;
-const int MAX_MESHES = 100;
+const int MAX_SPHERES = 10000;
+const int MAX_TRIS = 10000;
+const int MAX_MESHES = 10000;
 const int MAX_BOUNCE_COUNT = 3;
 const float PIXEL_SAMPLE_COUNT = 16.0;
 
@@ -224,6 +224,7 @@ HitInfo TraceRay(Ray ray)
 
         for (int i = 0; i < MAX_TRIS; i++)
         {
+            if (i == mesh.numTriangles) break;
             int triIndex = mesh.firstTriangleIndex + i;
 
             Triangle triangle;
