@@ -7,8 +7,8 @@ const float PI = 3.141592653589793;
 const int MAX_SPHERES = 10000;
 const int MAX_TRIS = 10000;
 const int MAX_MESHES = 10000;
-const int MAX_BOUNCE_COUNT = 3;
-const float PIXEL_SAMPLE_COUNT = 96.0;
+const int MAX_BOUNCE_COUNT = 4;
+const float PIXEL_SAMPLE_COUNT = 128.0;
 
 uniform vec2 ScreenParams;
 uniform vec3 ViewParams;
