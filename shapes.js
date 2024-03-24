@@ -85,7 +85,8 @@ export class Mesh {
     constructor(firstTriangleIndex, numTriangles, material) {
         this.firstTriangleIndex = firstTriangleIndex;
         this.numTriangles = numTriangles;
-        this.boundingSphere = new Sphere(new Vec3(0, 0, 0), 0);
+        this.min = new Vec3(0, 0, 0);
+        this.max = new Vec3(0, 0, 0);
         this.material = material;
     }
 
@@ -115,18 +116,7 @@ export class Mesh {
             }
         }
     
-        let edgeX = boundsMax.x - boundsMin.x;
-        let edgeY = boundsMax.y - boundsMin.y;
-        let edgeZ = boundsMax.z - boundsMin.z;
-    
-        let lowEdge = edgeX;
-        if (edgeZ > edgeX) {
-            lowEdge = edgeZ;
-        }
-        let faceHypSqr = (lowEdge * lowEdge) + (edgeY * edgeY);
-        let diameterSqr = (edgeY * edgeY) + faceHypSqr;
-        let radius = Math.sqrt(diameterSqr) / 2;
-    
-        this.boundingSphere = new Sphere(new Vec3(boundsMin.x + (edgeX / 2), boundsMin.y + (edgeY / 2), boundsMin.z + (edgeZ / 2)), radius);
+        this.min = boundsMin;
+        this.max = boundsMax;
     }
 }

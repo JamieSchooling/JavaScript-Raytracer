@@ -5,9 +5,10 @@ in vec2 pixelPos;
 
 const float PI = 3.141592653589793;
 const int MAX_SPHERES = 100;
-const int MAX_TRIS = 10;
-const int MAX_BOUNCE_COUNT = 5;
-const float PIXEL_SAMPLE_COUNT = 32.0;
+const int MAX_TRIS = 100;
+const int MAX_MESHES = 100;
+const int MAX_BOUNCE_COUNT = 3;
+const float PIXEL_SAMPLE_COUNT = 16.0;
 
 uniform vec2 ScreenParams;
 uniform vec3 ViewParams;
@@ -48,6 +49,15 @@ struct Triangle
     vec3 normalA, normalB, normalC;
 };
 
+struct MeshInfo
+{
+    int firstTriangleIndex;
+    int numTriangles;
+    vec3 min;
+    vec3 max;
+    RayTracingMaterial material;
+};
+
 struct HitInfo
 {
     bool didHit;
@@ -64,7 +74,9 @@ uniform vec2 SphereGeometryTexSize;
 uniform sampler2D SphereMatsTex;
 uniform vec2 SphereMatsTexSize;
 
-uniform int NumTris;
+uniform int NumMeshes;
+uniform sampler2D MeshInfoTex;
+uniform vec2 MeshInfoTexSize;
 
 uniform sampler2D TrianglesInfoTex;
 uniform vec2 TrianglesInfoTexSize;
@@ -146,6 +158,18 @@ HitInfo RayTriangle(Ray ray, Triangle tri) {
     }      
 }
 
+bool RayBoundingBox(Ray ray, vec3 boxMin, vec3 boxMax)
+{
+    vec3 invDir = 1.0 / ray.dir;
+    vec3 tMin = (boxMin - ray.origin) * invDir;
+    vec3 tMax = (boxMax - ray.origin) * invDir;
+    vec3 t1 = min(tMin, tMax);
+    vec3 t2 = max(tMin, tMax);
+    float tNear = max(max(t1.x, t1.y), t1.z);
+    float tFar = min(min(t2.x, t2.y), t2.z);
+    return tNear <= tFar;
+}
+
 HitInfo TraceRay(Ray ray) 
 {
     HitInfo closestHit;
@@ -181,26 +205,43 @@ HitInfo TraceRay(Ray ray)
         }
     }
 
-    for (int i = 0; i < MAX_TRIS; i++) 
+    for (int meshIndex = 0; meshIndex < MAX_MESHES; meshIndex++) 
     {
-        if (i == NumTris) break;
+        if (meshIndex == NumMeshes) break;
 
-        Triangle triangle;
-        triangle.posA = getValueByIndexFromTexture(TrianglesInfoTex, TrianglesInfoTexSize, float(i*6)).xyz;
-        triangle.posB = getValueByIndexFromTexture(TrianglesInfoTex, TrianglesInfoTexSize, float(i*6 + 1)).xyz;
-        triangle.posC = getValueByIndexFromTexture(TrianglesInfoTex, TrianglesInfoTexSize, float(i*6 + 2)).xyz;
+        vec4 meshInfoA = getValueByIndexFromTexture(MeshInfoTex, MeshInfoTexSize, float(meshIndex * 2));
+        vec4 meshInfoB = getValueByIndexFromTexture(MeshInfoTex, MeshInfoTexSize, float(meshIndex * 2 + 1));
+        MeshInfo mesh;
+        mesh.firstTriangleIndex = int(meshInfoA.w);
+        mesh.numTriangles = int(meshInfoB.w);
+        mesh.min = meshInfoA.xyz;
+        mesh.max = meshInfoB.xyz;
 
-        triangle.normalA = getValueByIndexFromTexture(TrianglesInfoTex, TrianglesInfoTexSize, float(i*6 + 3)).xyz;
-        triangle.normalB = getValueByIndexFromTexture(TrianglesInfoTex, TrianglesInfoTexSize, float(i*6 + 4)).xyz;
-        triangle.normalC = getValueByIndexFromTexture(TrianglesInfoTex, TrianglesInfoTexSize, float(i*6 + 5)).xyz;
-
-        HitInfo hitInfo = RayTriangle(ray, triangle);
-
-        if (hitInfo.didHit && hitInfo.dst < closestHit.dst) {
-            closestHit = hitInfo;
-            closestHit.material.colour = vec3(1, 1, 1);
+        if (!RayBoundingBox(ray, mesh.min, mesh.max)) {
+            continue;
         }
+        
 
+        for (int i = 0; i < MAX_TRIS; i++)
+        {
+            int triIndex = mesh.firstTriangleIndex + i;
+
+            Triangle triangle;
+            triangle.posA = getValueByIndexFromTexture(TrianglesInfoTex, TrianglesInfoTexSize, float(triIndex*6)).xyz;
+            triangle.posB = getValueByIndexFromTexture(TrianglesInfoTex, TrianglesInfoTexSize, float(triIndex*6 + 1)).xyz;
+            triangle.posC = getValueByIndexFromTexture(TrianglesInfoTex, TrianglesInfoTexSize, float(triIndex*6 + 2)).xyz;
+
+            triangle.normalA = getValueByIndexFromTexture(TrianglesInfoTex, TrianglesInfoTexSize, float(triIndex*6 + 3)).xyz;
+            triangle.normalB = getValueByIndexFromTexture(TrianglesInfoTex, TrianglesInfoTexSize, float(triIndex*6 + 4)).xyz;
+            triangle.normalC = getValueByIndexFromTexture(TrianglesInfoTex, TrianglesInfoTexSize, float(triIndex*6 + 5)).xyz;
+
+            HitInfo hitInfo = RayTriangle(ray, triangle);
+
+            if (hitInfo.didHit && hitInfo.dst < closestHit.dst) {
+                closestHit = hitInfo;
+                closestHit.material.colour = vec3(1, 1, 1);
+            }
+        }       
     }
 
     return closestHit;
@@ -346,6 +387,7 @@ void main()
 import Material from "./material.js";
 import { Sphere, Triangle } from "./shapes.js";
 import Vec3 from "./vec3.js";
+import OBJLoader from "./obj_loader.js";
 
 const canvas = document.getElementById("canvas");
 const gl = canvas.getContext("webgl2");
@@ -485,9 +527,6 @@ function setSpheres() {
 }
 
 function setTriangles() {
-    let numTrisLocation = gl.getUniformLocation(raytraceProgram, "NumTris");
-    gl.uniform1i(numTrisLocation, triangles.length);
-
     gl.activeTexture(gl.TEXTURE3);
     gl.bindTexture(gl.TEXTURE_2D, trianglesInfoTex);
     let trianglesInfoTexLoc = gl.getUniformLocation(raytraceProgram, "TrianglesInfoTex");
@@ -496,14 +535,26 @@ function setTriangles() {
     gl.uniform2f(trianglesInfoTexSizeLoc, triangleInfo.length / 3, 1);
 }
 
+function setMeshes() {
+    let numMeshesLoc = gl.getUniformLocation(raytraceProgram, "NumMeshes");
+    gl.uniform1i(numMeshesLoc, meshes.length);
+
+    gl.activeTexture(gl.TEXTURE4);
+    gl.bindTexture(gl.TEXTURE_2D, meshInfoTex);
+    let meshInfoTexLoc = gl.getUniformLocation(raytraceProgram, "MeshInfoTex");
+    gl.uniform1i(meshInfoTexLoc, 4);
+    let meshInfoTexSizeLoc = gl.getUniformLocation(raytraceProgram, "MeshInfoTexSize");
+    gl.uniform2f(meshInfoTexSizeLoc, meshInfo.length / 4, 1);
+}
+
 let imageWidth = canvas.width;
 let imageHeight = canvas.height;
 let aspectRatio = imageHeight / imageWidth;
 
-let camPosition = new Vec3(0, 0, -1);
+let camPosition = new Vec3(0, 0, 1);
 let camUp = new Vec3(0, 1, 0);
 let camRight = new Vec3(1, 0, 0);
-let camForward = new Vec3(0, 0, 1);
+let camForward = new Vec3(0, 0, -1);
 let fov = 60;
 let focusDistance = 1;
 
@@ -550,51 +601,25 @@ let spheresInfoTex = makeDataTexture(gl, spheresInfo, 4);
 let sphereMatsTex = makeDataTexture(gl, sphereMaterials, 4);
 
 const triangles = [
-    new Triangle(
-        new Vec3(-0.5, -0.45, 1.5), new Vec3(-1, -0.45, 1), new Vec3(0, -0.45, 1),
-        new Vec3(0, 1, 0), new Vec3(0, 1, 0), new Vec3(0, 1, 0),
-    ),
-    new Triangle(
-        new Vec3(0.5, -0.35, 1.5), new Vec3(0, -0.35, 1), new Vec3(1, -0.35, 1),
-        new Vec3(0, 1, 0), new Vec3(0, 1, 0), new Vec3(0, 1, 0),
-    ),
-    new Triangle(
-        new Vec3(0.5, 0.35, 1.5), new Vec3(0, 0.35, 1), new Vec3(1, 0.35, 1),
-        new Vec3(0, 1, 0), new Vec3(0, 1, 0), new Vec3(0, 1, 0),
-    ),
-    new Triangle(
-        new Vec3(0.2, 0.3, 2.5), new Vec3(-0.3, 0.3, 2), new Vec3(0.7, 0.3, 2),
-        new Vec3(0, 1, 0), new Vec3(0, 1, 0), new Vec3(0, 1, 0),
-    ),
+    // new Triangle(
+    //     new Vec3(-0.5, -0.45, 1.5), new Vec3(-1, -0.45, 1), new Vec3(0, -0.45, 1),
+    //     new Vec3(0, 1, 0), new Vec3(0, 1, 0), new Vec3(0, 1, 0),
+    // ),
+    // new Triangle(
+    //     new Vec3(0.5, -0.35, 1.5), new Vec3(0, -0.35, 1), new Vec3(1, -0.35, 1),
+    //     new Vec3(0, 1, 0), new Vec3(0, 1, 0), new Vec3(0, 1, 0),
+    // ),
+    // new Triangle(
+    //     new Vec3(0.5, 0.35, 1.5), new Vec3(0, 0.35, 1), new Vec3(1, 0.35, 1),
+    //     new Vec3(0, 1, 0), new Vec3(0, 1, 0), new Vec3(0, 1, 0),
+    // ),
+    // new Triangle(
+    //     new Vec3(0.2, 0.3, 2.5), new Vec3(-0.3, 0.3, 2), new Vec3(0.7, 0.3, 2),
+    //     new Vec3(0, 1, 0), new Vec3(0, 1, 0), new Vec3(0, 1, 0),
+    // ),
 ];
 
-let triangleInfo = [];
-for (let i = 0; i < triangles.length; i++) {
-    triangleInfo.push(triangles[i].posA.x);
-    triangleInfo.push(triangles[i].posA.y);
-    triangleInfo.push(triangles[i].posA.z);
-
-    triangleInfo.push(triangles[i].posB.x);
-    triangleInfo.push(triangles[i].posB.y);
-    triangleInfo.push(triangles[i].posB.z);
-    
-    triangleInfo.push(triangles[i].posC.x);
-    triangleInfo.push(triangles[i].posC.y);
-    triangleInfo.push(triangles[i].posC.z);
-
-    triangleInfo.push(triangles[i].normalA.x);
-    triangleInfo.push(triangles[i].normalA.y);
-    triangleInfo.push(triangles[i].normalA.z);
-    
-    triangleInfo.push(triangles[i].normalB.x);
-    triangleInfo.push(triangles[i].normalB.y);
-    triangleInfo.push(triangles[i].normalB.z);
-
-    triangleInfo.push(triangles[i].normalC.x);
-    triangleInfo.push(triangles[i].normalC.y);
-    triangleInfo.push(triangles[i].normalC.z);
-}
-let trianglesInfoTex = makeDataTexture(gl, triangleInfo, 3);
+const meshes = [];
 
 function makeDataTexture(gl, data, numComponents) {
     // expand the data to 4 values per pixel.
@@ -663,6 +688,7 @@ function rayTrace() {
     updateLightParams();
     setSpheres();
     setTriangles();
+    setMeshes();
     
     let frameLocation = gl.getUniformLocation(raytraceProgram, "Frame");
     gl.uniform1f(frameLocation, frame);
@@ -685,6 +711,57 @@ function draw() {
     gl.bindTexture(gl.TEXTURE_2D, null);
 }
 
+let triangleInfo = [];
+let trianglesInfoTex;
+
+let meshInfo = [];
+let meshInfoTex;
+async function initMeshes() {
+    meshes.push(await OBJLoader.meshFromOBJ("resources/test_objects/cube.obj", triangles, new Material(new Vec3(1, 1, 1))));  
+
+    for (let i = 0; i < triangles.length; i++) {
+        triangleInfo.push(triangles[i].posA.x);
+        triangleInfo.push(triangles[i].posA.y);
+        triangleInfo.push(triangles[i].posA.z);
+
+        triangleInfo.push(triangles[i].posB.x);
+        triangleInfo.push(triangles[i].posB.y);
+        triangleInfo.push(triangles[i].posB.z);
+        
+        triangleInfo.push(triangles[i].posC.x);
+        triangleInfo.push(triangles[i].posC.y);
+        triangleInfo.push(triangles[i].posC.z);
+
+        triangleInfo.push(triangles[i].normalA.x);
+        triangleInfo.push(triangles[i].normalA.y);
+        triangleInfo.push(triangles[i].normalA.z);
+        
+        triangleInfo.push(triangles[i].normalB.x);
+        triangleInfo.push(triangles[i].normalB.y);
+        triangleInfo.push(triangles[i].normalB.z);
+
+        triangleInfo.push(triangles[i].normalC.x);
+        triangleInfo.push(triangles[i].normalC.y);
+        triangleInfo.push(triangles[i].normalC.z);
+    } 
+    trianglesInfoTex = makeDataTexture(gl, triangleInfo, 3);
+
+    for (let i = 0; i < meshes.length; i++) {
+        meshInfo.push(meshes[i].min.x);
+        meshInfo.push(meshes[i].min.y);
+        meshInfo.push(meshes[i].min.z);
+        meshInfo.push(meshes[i].firstTriangleIndex);
+
+        meshInfo.push(meshes[i].max.x);
+        meshInfo.push(meshes[i].max.y);
+        meshInfo.push(meshes[i].max.z);
+        meshInfo.push(meshes[i].numTriangles);
+    }
+    meshInfoTex = makeDataTexture(gl, meshInfo, 4);
+
+    render();
+}
+
 let frame = 0;
 function render() {
     
@@ -694,6 +771,6 @@ function render() {
     frame++;
     requestAnimationFrame(render);   
 }
-render();
 
+initMeshes();
 
