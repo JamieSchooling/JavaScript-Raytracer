@@ -8,7 +8,7 @@ const int MAX_SPHERES = 10000;
 const int MAX_TRIS = 10000;
 const int MAX_MESHES = 10000;
 const int MAX_BOUNCE_COUNT = 4;
-const float PIXEL_SAMPLE_COUNT = 128.0;
+const float PIXEL_SAMPLE_COUNT = 32.0;
 
 uniform vec2 ScreenParams;
 uniform vec3 ViewParams;
@@ -415,12 +415,9 @@ import Material from "./material.js";
 import { Sphere, Triangle } from "./shapes.js";
 import Vec3 from "./vec3.js";
 import OBJLoader from "./obj_loader.js";
+import Scene from "./scene.js";
+import SceneManager from "./scene_manager.js";
 
-const canvas = document.getElementById("canvas");
-const gl = canvas.getContext("webgl2");
-
-let raytraceProgram;
-let drawProgram;
 
 function initWebGL() {
     gl.clearColor(1.0, 0.0, 0.0, 1.0);
@@ -584,82 +581,6 @@ function setMeshes() {
     gl.uniform2f(meshMatsTexSizeLoc, meshMaterials.length / 4, 1);
 }
 
-let imageWidth = canvas.width;
-let imageHeight = canvas.height;
-let aspectRatio = imageHeight / imageWidth;
-
-let camPosition = new Vec3(0, 0, 0);
-let camUp = new Vec3(0, 1, 0);
-let camRight = new Vec3(1, 0, 0);
-let camForward = new Vec3(0, 0, -1);
-let fov = 40;
-let divergeStrength = 1;
-let defocusStrength = 1;
-let focusDistance = 1;
-
-let sunDirection  = new Vec3(0.6, 0.5, -1).normalised();
-let sunIntensity = 40;
-let sunFocus = 200;
-
-let skyColourHorizon = new Vec3(1, 1, 1);
-let skyColourZenith = new Vec3(0.3, 0.5, 0.9);
-let groundColour = new Vec3(0.2, 0.2, 0.2);
-
-initWebGL();
-
-const spheres = [
-    // new Sphere(new Vec3(-0.5, -0.2, 2), 0.3, new Material(new Vec3(1, 0, 0), new Vec3(1, 1, 1), 0, 1, 0.1)),       // Red sphere
-    // new Sphere(new Vec3(0.3,-0.35, 1.8), 0.15, new Material(new Vec3(0,0,1), new Vec3(1, 1, 1), 0, 1, 0.1)),  // Blue sphere
-    // new Sphere(new Vec3(0,-100.5, 2), 100, new Material(new Vec3(.7,.1,.7))),    // Big sphere
-];
-let spheresInfo = [];
-let sphereMaterials = [];
-for (let i = 0; i < spheres.length; i++)
-{
-    spheresInfo.push(spheres[i].centre.x);
-    spheresInfo.push(spheres[i].centre.y);
-    spheresInfo.push(spheres[i].centre.z);
-    spheresInfo.push(spheres[i].radius);
-    
-    sphereMaterials.push(spheres[i].material.colour.x);
-    sphereMaterials.push(spheres[i].material.colour.y);
-    sphereMaterials.push(spheres[i].material.colour.z);
-    sphereMaterials.push(spheres[i].material.smoothness);
-    
-    sphereMaterials.push(spheres[i].material.emissionColour.x);
-    sphereMaterials.push(spheres[i].material.emissionColour.y);
-    sphereMaterials.push(spheres[i].material.emissionColour.z);
-    sphereMaterials.push(spheres[i].material.emissionStrength);
-    
-    sphereMaterials.push(spheres[i].material.specularColour.x);
-    sphereMaterials.push(spheres[i].material.specularColour.y);
-    sphereMaterials.push(spheres[i].material.specularColour.z);
-    sphereMaterials.push(spheres[i].material.specularProbability);
-}
-let spheresInfoTex = makeDataTexture(gl, spheresInfo, 4);
-let sphereMatsTex = makeDataTexture(gl, sphereMaterials, 4);
-
-const triangles = [
-    // new Triangle(
-    //     new Vec3(-0.5, -0.45, 1.5), new Vec3(-1, -0.45, 1), new Vec3(0, -0.45, 1),
-    //     new Vec3(0, 1, 0), new Vec3(0, 1, 0), new Vec3(0, 1, 0),
-    // ),
-    // new Triangle(
-    //     new Vec3(0.5, -0.35, 1.5), new Vec3(0, -0.35, 1), new Vec3(1, -0.35, 1),
-    //     new Vec3(0, 1, 0), new Vec3(0, 1, 0), new Vec3(0, 1, 0),
-    // ),
-    // new Triangle(
-    //     new Vec3(0.5, 0.35, 1.5), new Vec3(0, 0.35, 1), new Vec3(1, 0.35, 1),
-    //     new Vec3(0, 1, 0), new Vec3(0, 1, 0), new Vec3(0, 1, 0),
-    // ),
-    // new Triangle(
-    //     new Vec3(0.2, 0.3, 2.5), new Vec3(-0.3, 0.3, 2), new Vec3(0.7, 0.3, 2),
-    //     new Vec3(0, 1, 0), new Vec3(0, 1, 0), new Vec3(0, 1, 0),
-    // ),
-];
-
-const meshes = [];
-
 function makeDataTexture(gl, data, numComponents) {
     // expand the data to 4 values per pixel.
     const numElements = data.length / numComponents;
@@ -693,6 +614,243 @@ function makeDataTexture(gl, data, numComponents) {
     return tex;
 }
 
+function rayTrace() {
+    gl.useProgram(raytraceProgram);
+    
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, (currentFrame % 2 === 0) ? textureA : textureB);
+    let currentFrameLocation = gl.getUniformLocation(raytraceProgram, "BaseImage");
+    gl.uniform1i(currentFrameLocation, 0);
+    
+    updateScreenParams();
+    updateCameraParams();
+    updateLightParams();
+    setSpheres();
+    setTriangles();
+    setMeshes();
+    
+    let frameLocation = gl.getUniformLocation(raytraceProgram, "Frame");
+    gl.uniform1f(frameLocation, currentFrame);
+    
+    gl.bindFramebuffer(gl.FRAMEBUFFER, (currentFrame % 2 === 0) ? fboB : fboA);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+}
+
+function draw() {
+    gl.useProgram(drawProgram);   
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, (currentFrame % 2 === 0) ? textureB : textureA);
+    let currentFrameLocation = gl.getUniformLocation(drawProgram, "CurrentFrame");
+    gl.uniform1i(currentFrameLocation, 0);
+    
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+}
+
+async function initMeshes() {
+    let scene = SceneManager.currentScene;
+
+    triangleInfo = [];
+    meshInfo = [];
+    meshMaterials = [];
+
+    for (let i = 0; i < scene.triangles.length; i++) {
+        triangleInfo.push(scene.triangles[i].posA.x);
+        triangleInfo.push(scene.triangles[i].posA.y);
+        triangleInfo.push(scene.triangles[i].posA.z);
+
+        triangleInfo.push(scene.triangles[i].posB.x);
+        triangleInfo.push(scene.triangles[i].posB.y);
+        triangleInfo.push(scene.triangles[i].posB.z);
+
+        triangleInfo.push(scene.triangles[i].posC.x);
+        triangleInfo.push(scene.triangles[i].posC.y);
+        triangleInfo.push(scene.triangles[i].posC.z);
+
+        triangleInfo.push(scene.triangles[i].normalA.x);
+        triangleInfo.push(scene.triangles[i].normalA.y);
+        triangleInfo.push(scene.triangles[i].normalA.z);
+
+        triangleInfo.push(scene.triangles[i].normalB.x);
+        triangleInfo.push(scene.triangles[i].normalB.y);
+        triangleInfo.push(scene.triangles[i].normalB.z);
+
+        triangleInfo.push(scene.triangles[i].normalC.x);
+        triangleInfo.push(scene.triangles[i].normalC.y);
+        triangleInfo.push(scene.triangles[i].normalC.z);
+    } 
+    trianglesInfoTex = makeDataTexture(gl, triangleInfo, 3);
+
+    for (let i = 0; i < scene.meshes.length; i++) {
+        meshInfo.push(scene.meshes[i].min.x);
+        meshInfo.push(scene.meshes[i].min.y);
+        meshInfo.push(scene.meshes[i].min.z);
+        meshInfo.push(scene.meshes[i].firstTriangleIndex);
+
+        meshInfo.push(scene.meshes[i].max.x);
+        meshInfo.push(scene.meshes[i].max.y);
+        meshInfo.push(scene.meshes[i].max.z);
+        meshInfo.push(scene.meshes[i].numTriangles);
+
+        meshMaterials.push(scene.meshes[i].material.colour.x);
+        meshMaterials.push(scene.meshes[i].material.colour.y);
+        meshMaterials.push(scene.meshes[i].material.colour.z);
+        meshMaterials.push(scene.meshes[i].material.smoothness);
+        
+        meshMaterials.push(scene.meshes[i].material.emissionColour.x);
+        meshMaterials.push(scene.meshes[i].material.emissionColour.y);
+        meshMaterials.push(scene.meshes[i].material.emissionColour.z);
+        meshMaterials.push(scene.meshes[i].material.emissionStrength);
+        
+        meshMaterials.push(scene.meshes[i].material.specularColour.x);
+        meshMaterials.push(scene.meshes[i].material.specularColour.y);
+        meshMaterials.push(scene.meshes[i].material.specularColour.z);
+        meshMaterials.push(scene.meshes[i].material.specularProbability);
+    }
+    meshInfoTex = makeDataTexture(gl, meshInfo, 4);
+    meshMatsTex = makeDataTexture(gl, meshMaterials, 4);
+}
+
+async function createScenePlanet() {
+    spheres = [];
+    meshes = [];
+    triangles = [];
+
+    meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/light_left.obj", triangles, new Material(new Vec3(0, 0, 0), new Vec3(1, 1, 1), 6.5, 0, 0, new Vec3(0, 0, 0), )));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/light_right.obj", triangles, new Material(new Vec3(0, 0, 0), new Vec3(1, 1, 1), 6.5, 0, 0, new Vec3(0, 0, 0))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/grass.obj", triangles, new Material(new Vec3(0.108, 0.576, 0.060))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/river.obj", triangles, new Material(new Vec3(0.155, 0.534, 0.793))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/mountain.obj", triangles, new Material(new Vec3(0.145, 0.145, 0.145))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/tree1.obj", triangles, new Material(new Vec3(0.145, 0.048, 0.010))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/tree2.obj", triangles, new Material(new Vec3(0.145, 0.048, 0.010))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/tree3.obj", triangles, new Material(new Vec3(0.145, 0.048, 0.010))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/leaves1.obj", triangles, new Material(new Vec3(0.108, 0.576, 0.060))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/leaves2.obj", triangles, new Material(new Vec3(0.108, 0.576, 0.060))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/leaves3.obj", triangles, new Material(new Vec3(0.995, 0.170, 0))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/cloud1.obj", triangles, new Material(new Vec3(1, 1, 1))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/cloud2.obj", triangles, new Material(new Vec3(1, 1, 1))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/cloud3.obj", triangles, new Material(new Vec3(1, 1, 1))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/cloud4.obj", triangles, new Material(new Vec3(1, 1, 1))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/cloud5.obj", triangles, new Material(new Vec3(1, 1, 1))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/cloud6.obj", triangles, new Material(new Vec3(1, 1, 1))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/cloud5.obj", triangles, new Material(new Vec3(1, 1, 1))));
+
+    let scene = new Scene();
+    scene.name = "Planet";
+    scene.spheres = spheres;
+    scene.meshes = meshes;
+    scene.triangles = triangles;
+    SceneManager.scenes.push(scene);
+}
+
+async function createSceneCornellBox() {
+    spheres = [];
+    meshes = [];
+    triangles = [];
+
+    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_light.obj", triangles, new Material(new Vec3(0, 0, 0), new Vec3(1, 1, 1), 35)));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_top_bottom.obj", triangles, new Material(new Vec3(1, 1, 1))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_left.obj", triangles, new Material(new Vec3(1, 0, 0))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_right.obj", triangles, new Material(new Vec3(0, 1, 0))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_back.obj", triangles, new Material(new Vec3(1, 1, 1))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_cube_small.obj", triangles, new Material(new Vec3(1, 1, 1))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_cube_tall.obj", triangles, new Material(new Vec3(1, 1, 1))));
+
+    let scene = new Scene();
+    scene.name = "Cornell Box";
+    scene.spheres = spheres;
+    scene.meshes = meshes;
+    scene.triangles = triangles;
+    SceneManager.scenes.push(scene);
+}
+
+async function loadScene(index) {
+    SceneManager.loadScene(gl, index);
+    await initMeshes();
+}
+
+function render() {
+    rayTrace();    
+    draw();
+
+    currentFrame++;
+    requestAnimationFrame(render);   
+}
+
+async function main() {
+    await createSceneCornellBox();
+    await createScenePlanet();
+
+    loadScene(0);
+    render();
+}
+
+const canvas = document.getElementById("canvas");
+const gl = canvas.getContext("webgl2");
+
+let raytraceProgram;
+let drawProgram;
+
+let imageWidth = canvas.width;
+let imageHeight = canvas.height;
+let aspectRatio = imageHeight / imageWidth;
+
+let camPosition = new Vec3(0, 0, 0);
+let camUp = new Vec3(0, 1, 0);
+let camRight = new Vec3(1, 0, 0);
+let camForward = new Vec3(0, 0, -1);
+let fov = 40;
+let divergeStrength = 1;
+let defocusStrength = 1;
+let focusDistance = 1;
+
+let sunDirection  = new Vec3(0.6, 0.5, -1).normalised();
+let sunIntensity = 40;
+let sunFocus = 200;
+
+let skyColourHorizon = new Vec3(1, 1, 1);
+let skyColourZenith = new Vec3(0.3, 0.5, 0.9);
+let groundColour = new Vec3(0.2, 0.2, 0.2);
+
+let spheres = [
+    // new Sphere(new Vec3(-0.5, -0.2, 2), 0.3, new Material(new Vec3(1, 0, 0), new Vec3(1, 1, 1), 0, 1, 0.1)),       // Red sphere
+    // new Sphere(new Vec3(0.3,-0.35, 1.8), 0.15, new Material(new Vec3(0,0,1), new Vec3(1, 1, 1), 0, 1, 0.1)),  // Blue sphere
+    // new Sphere(new Vec3(0,-100.5, 2), 100, new Material(new Vec3(.7,.1,.7))),    // Big sphere
+];
+let spheresInfo = [];
+let sphereMaterials = [];
+for (let i = 0; i < spheres.length; i++)
+{
+    spheresInfo.push(spheres[i].centre.x);
+    spheresInfo.push(spheres[i].centre.y);
+    spheresInfo.push(spheres[i].centre.z);
+    spheresInfo.push(spheres[i].radius);
+    
+    sphereMaterials.push(spheres[i].material.colour.x);
+    sphereMaterials.push(spheres[i].material.colour.y);
+    sphereMaterials.push(spheres[i].material.colour.z);
+    sphereMaterials.push(spheres[i].material.smoothness);
+    
+    sphereMaterials.push(spheres[i].material.emissionColour.x);
+    sphereMaterials.push(spheres[i].material.emissionColour.y);
+    sphereMaterials.push(spheres[i].material.emissionColour.z);
+    sphereMaterials.push(spheres[i].material.emissionStrength);
+    
+    sphereMaterials.push(spheres[i].material.specularColour.x);
+    sphereMaterials.push(spheres[i].material.specularColour.y);
+    sphereMaterials.push(spheres[i].material.specularColour.z);
+    sphereMaterials.push(spheres[i].material.specularProbability);
+}
+let spheresInfoTex = makeDataTexture(gl, spheresInfo, 4);
+let sphereMatsTex = makeDataTexture(gl, sphereMaterials, 4);
+
+let triangles = [];
+
+let meshes = [];
+
 // Create (empty) texture for raytracer output
 const textureA = gl.createTexture();
 gl.bindTexture(gl.TEXTURE_2D, textureA);
@@ -714,42 +872,6 @@ gl.bindFramebuffer(gl.FRAMEBUFFER, fboB);
 gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, textureB, 0);
 gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
-function rayTrace() {
-    gl.useProgram(raytraceProgram);
-    
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, (frame % 2 == 0) ? textureA : textureB);
-    let currentFrameLocation = gl.getUniformLocation(raytraceProgram, "BaseImage");
-    gl.uniform1i(currentFrameLocation, 0);
-    
-    updateScreenParams();
-    updateCameraParams();
-    updateLightParams();
-    setSpheres();
-    setTriangles();
-    setMeshes();
-    
-    let frameLocation = gl.getUniformLocation(raytraceProgram, "Frame");
-    gl.uniform1f(frameLocation, frame);
-    
-    gl.bindFramebuffer(gl.FRAMEBUFFER, (frame % 2 == 0) ? fboB : fboA);
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.bindTexture(gl.TEXTURE_2D, null);
-}
-
-function draw() {
-    gl.useProgram(drawProgram);   
-
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, (frame % 2 == 0) ? textureB : textureA);
-    let currentFrameLocation = gl.getUniformLocation(drawProgram, "CurrentFrame");
-    gl.uniform1i(currentFrameLocation, 0);
-    
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
-    gl.bindTexture(gl.TEXTURE_2D, null);
-}
-
 let triangleInfo = [];
 let trianglesInfoTex;
 
@@ -757,104 +879,8 @@ let meshInfo = [];
 let meshMaterials = [];
 let meshInfoTex;
 let meshMatsTex;
-async function initMeshes() {
-    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/light_left.obj", triangles, new Material(new Vec3(0, 0, 0), new Vec3(1, 1, 1), 6.5, 0, 0, new Vec3(0, 0, 0), )));
-    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/light_right.obj", triangles, new Material(new Vec3(0, 0, 0), new Vec3(1, 1, 1), 6.5, 0, 0, new Vec3(0, 0, 0))));
-    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/grass.obj", triangles, new Material(new Vec3(0.108, 0.576, 0.060))));
-    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/river.obj", triangles, new Material(new Vec3(0.155, 0.534, 0.793))));
-    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/mountain.obj", triangles, new Material(new Vec3(0.145, 0.145, 0.145))));
-    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/tree1.obj", triangles, new Material(new Vec3(0.145, 0.048, 0.010))));
-    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/tree2.obj", triangles, new Material(new Vec3(0.145, 0.048, 0.010))));
-    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/tree3.obj", triangles, new Material(new Vec3(0.145, 0.048, 0.010))));
-    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/leaves1.obj", triangles, new Material(new Vec3(0.108, 0.576, 0.060))));
-    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/leaves2.obj", triangles, new Material(new Vec3(0.108, 0.576, 0.060))));
-    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/leaves3.obj", triangles, new Material(new Vec3(0.995, 0.170, 0))));
-    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/cloud1.obj", triangles, new Material(new Vec3(1, 1, 1))));
-    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/cloud2.obj", triangles, new Material(new Vec3(1, 1, 1))));
-    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/cloud3.obj", triangles, new Material(new Vec3(1, 1, 1))));
-    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/cloud4.obj", triangles, new Material(new Vec3(1, 1, 1))));
-    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/cloud5.obj", triangles, new Material(new Vec3(1, 1, 1))));
-    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/cloud6.obj", triangles, new Material(new Vec3(1, 1, 1))));
-    // meshes.push(await OBJLoader.meshFromOBJ("resources/scene_objects/cloud5.obj", triangles, new Material(new Vec3(1, 1, 1))));
 
-    // meshes.push(await OBJLoader.meshFromOBJ("resources/test_objects/cube.obj", triangles, new Material(new Vec3(1, 1, 1))));  
-    
-    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_light.obj", triangles, new Material(new Vec3(0, 0, 0), new Vec3(1, 1, 1), 35)));
-    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_top_bottom.obj", triangles, new Material(new Vec3(1, 1, 1))));
-    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_left.obj", triangles, new Material(new Vec3(1, 0, 0))));
-    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_right.obj", triangles, new Material(new Vec3(0, 1, 0))));
-    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_back.obj", triangles, new Material(new Vec3(1, 1, 1))));
-    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_cube_small.obj", triangles, new Material(new Vec3(1, 1, 1))));
-    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_cube_tall.obj", triangles, new Material(new Vec3(1, 1, 1))));
+let currentFrame = 0;
 
-    for (let i = 0; i < triangles.length; i++) {
-        triangleInfo.push(triangles[i].posA.x);
-        triangleInfo.push(triangles[i].posA.y);
-        triangleInfo.push(triangles[i].posA.z);
-
-        triangleInfo.push(triangles[i].posB.x);
-        triangleInfo.push(triangles[i].posB.y);
-        triangleInfo.push(triangles[i].posB.z);
-        
-        triangleInfo.push(triangles[i].posC.x);
-        triangleInfo.push(triangles[i].posC.y);
-        triangleInfo.push(triangles[i].posC.z);
-
-        triangleInfo.push(triangles[i].normalA.x);
-        triangleInfo.push(triangles[i].normalA.y);
-        triangleInfo.push(triangles[i].normalA.z);
-        
-        triangleInfo.push(triangles[i].normalB.x);
-        triangleInfo.push(triangles[i].normalB.y);
-        triangleInfo.push(triangles[i].normalB.z);
-
-        triangleInfo.push(triangles[i].normalC.x);
-        triangleInfo.push(triangles[i].normalC.y);
-        triangleInfo.push(triangles[i].normalC.z);
-    } 
-    trianglesInfoTex = makeDataTexture(gl, triangleInfo, 3);
-
-    for (let i = 0; i < meshes.length; i++) {
-        meshInfo.push(meshes[i].min.x);
-        meshInfo.push(meshes[i].min.y);
-        meshInfo.push(meshes[i].min.z);
-        meshInfo.push(meshes[i].firstTriangleIndex);
-
-        meshInfo.push(meshes[i].max.x);
-        meshInfo.push(meshes[i].max.y);
-        meshInfo.push(meshes[i].max.z);
-        meshInfo.push(meshes[i].numTriangles);
-
-        meshMaterials.push(meshes[i].material.colour.x);
-        meshMaterials.push(meshes[i].material.colour.y);
-        meshMaterials.push(meshes[i].material.colour.z);
-        meshMaterials.push(meshes[i].material.smoothness);
-        
-        meshMaterials.push(meshes[i].material.emissionColour.x);
-        meshMaterials.push(meshes[i].material.emissionColour.y);
-        meshMaterials.push(meshes[i].material.emissionColour.z);
-        meshMaterials.push(meshes[i].material.emissionStrength);
-        
-        meshMaterials.push(meshes[i].material.specularColour.x);
-        meshMaterials.push(meshes[i].material.specularColour.y);
-        meshMaterials.push(meshes[i].material.specularColour.z);
-        meshMaterials.push(meshes[i].material.specularProbability);
-    }
-    meshInfoTex = makeDataTexture(gl, meshInfo, 4);
-    meshMatsTex = makeDataTexture(gl, meshMaterials, 4);
-
-    render();
-}
-
-let frame = 0;
-function render() {
-    
-    rayTrace();    
-    draw();
-
-    frame++;
-    requestAnimationFrame(render);   
-}
-
-initMeshes();
-
+initWebGL();
+main();
