@@ -653,6 +653,8 @@ function draw() {
 async function initMeshes() {
     let scene = SceneManager.currentScene;
 
+    console.log(SceneManager.currentScene);
+
     triangleInfo = [];
     meshInfo = [];
     meshMaterials = [];
@@ -768,11 +770,32 @@ async function createSceneCornellBox() {
 }
 
 async function loadScene(index) {
-    SceneManager.loadScene(gl, index);
+    console.log(index);
+
+    // Create (empty) texture for raytracer output
+    textureA = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, textureA);
+    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, imageWidth, imageHeight);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fboA);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, textureA, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    textureB = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, textureB);
+    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, imageWidth, imageHeight);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fboB);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, textureB, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    SceneManager.loadScene(index);
     await initMeshes();
 }
 
-function render() {
+function render() { 
+
     rayTrace();    
     draw();
 
@@ -852,22 +875,22 @@ let triangles = [];
 let meshes = [];
 
 // Create (empty) texture for raytracer output
-const textureA = gl.createTexture();
+let textureA = gl.createTexture();
 gl.bindTexture(gl.TEXTURE_2D, textureA);
 gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, imageWidth, imageHeight);
 gl.bindTexture(gl.TEXTURE_2D, null);
 
-const fboA = gl.createFramebuffer();
+let fboA = gl.createFramebuffer();
 gl.bindFramebuffer(gl.FRAMEBUFFER, fboA);
 gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, textureA, 0);
 gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
-const textureB = gl.createTexture();
+let textureB = gl.createTexture();
 gl.bindTexture(gl.TEXTURE_2D, textureB);
 gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, imageWidth, imageHeight);
 gl.bindTexture(gl.TEXTURE_2D, null);
 
-const fboB = gl.createFramebuffer();
+let fboB = gl.createFramebuffer();
 gl.bindFramebuffer(gl.FRAMEBUFFER, fboB);
 gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, textureB, 0);
 gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -881,6 +904,11 @@ let meshInfoTex;
 let meshMatsTex;
 
 let currentFrame = 0;
+
+let dropdown = document.getElementById("sceneSelect");
+dropdown.addEventListener("change", async (event) => {
+    await loadScene(event.target.value);
+});
 
 initWebGL();
 main();

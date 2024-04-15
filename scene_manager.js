@@ -2,8 +2,7 @@ export default class SceneManager {
     static currentScene = undefined;
     static scenes = [];
 
-    static loadScene(gl, index) {
-        gl.clear(gl.COLOR_BUFFER_BIT);
+    static loadScene(index) {
         this.currentScene = this.scenes[index];
     }
 }
