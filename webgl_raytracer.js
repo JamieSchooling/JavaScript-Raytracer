@@ -492,7 +492,7 @@ function initWebGL() {
 
 function updateCameraParams() {
     let camera = SceneManager.currentScene.camera;
-    let planeWidth = camera.focusDistance * Math.tan(fov * 0.5 * (Math.PI / 180)) * 2;
+    let planeWidth = camera.focusDistance * Math.tan(camera.fov * 0.5 * (Math.PI / 180)) * 2;
     let planeHeight = planeWidth * aspectRatio;
     let viewParamsLocation = gl.getUniformLocation(raytraceProgram, "ViewParams");
     gl.uniform3fv(viewParamsLocation, [planeWidth, planeHeight, camera.focusDistance]);
@@ -509,7 +509,7 @@ function updateCameraParams() {
     gl.uniform3fv(worldSpaceCameraPosLocation, [camera.position.x, camera.position.y, camera.position.z]);
 
     let divergeStrengthLocation = gl.getUniformLocation(raytraceProgram, "DivergeStrength");
-    gl.uniform1f(divergeStrengthLocation, divergeStrength);
+    gl.uniform1f(divergeStrengthLocation, camera.divergeStrength);
 }
 
 function updateScreenParams() {
@@ -654,11 +654,18 @@ function draw() {
     gl.bindTexture(gl.TEXTURE_2D, null);
 }
 
-async function initMeshes() {
+async function initObjects() {
     let scene = SceneManager.currentScene;
 
     console.log(SceneManager.currentScene);
 
+    spheres = scene.spheres;
+    meshes = scene.meshes;
+    triangles = scene.triangles;
+
+    spheresInfo = [];
+    sphereMaterials = [];
+    
     triangleInfo = [];
     meshInfo = [];
     meshMaterials = [];
@@ -718,6 +725,31 @@ async function initMeshes() {
     }
     meshInfoTex = makeDataTexture(gl, meshInfo, 4);
     meshMatsTex = makeDataTexture(gl, meshMaterials, 4);
+
+    for (let i = 0; i < spheres.length; i++)
+    {
+        spheresInfo.push(spheres[i].centre.x);
+        spheresInfo.push(spheres[i].centre.y);
+        spheresInfo.push(spheres[i].centre.z);
+        spheresInfo.push(spheres[i].radius);
+        
+        sphereMaterials.push(spheres[i].material.colour.x);
+        sphereMaterials.push(spheres[i].material.colour.y);
+        sphereMaterials.push(spheres[i].material.colour.z);
+        sphereMaterials.push(spheres[i].material.smoothness);
+        
+        sphereMaterials.push(spheres[i].material.emissionColour.x);
+        sphereMaterials.push(spheres[i].material.emissionColour.y);
+        sphereMaterials.push(spheres[i].material.emissionColour.z);
+        sphereMaterials.push(spheres[i].material.emissionStrength);
+        
+        sphereMaterials.push(spheres[i].material.specularColour.x);
+        sphereMaterials.push(spheres[i].material.specularColour.y);
+        sphereMaterials.push(spheres[i].material.specularColour.z);
+        sphereMaterials.push(spheres[i].material.specularProbability);
+    }
+    spheresInfoTex = makeDataTexture(gl, spheresInfo, 4);
+    sphereMatsTex = makeDataTexture(gl, sphereMaterials, 4);
 }
 
 async function createScenePlanet() {
@@ -749,6 +781,9 @@ async function createScenePlanet() {
     scene.spheres = spheres;
     scene.meshes = meshes;
     scene.triangles = triangles;
+    scene.skybox.colourHorizon = new Vec3(0.1, 0.1, 0.3);
+    scene.skybox.colourZenith = new Vec3(0.05, 0.1, 0.2);
+    scene.skybox.groundColour = new Vec3(0, 0, 0);
     SceneManager.scenes.push(scene);
 }
 
@@ -757,7 +792,7 @@ async function createSceneCornellBox() {
     meshes = [];
     triangles = [];
 
-    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_light.obj", triangles, new Material(new Vec3(0, 0, 0), new Vec3(1, 1, 1), 35)));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_light_centred.obj", triangles, new Material(new Vec3(0, 0, 0), new Vec3(1, 1, 1), 25)));
     meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_top_bottom.obj", triangles, new Material(new Vec3(1, 1, 1))));
     meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_left.obj", triangles, new Material(new Vec3(1, 0, 0))));
     meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_right.obj", triangles, new Material(new Vec3(0, 1, 0))));
@@ -770,6 +805,49 @@ async function createSceneCornellBox() {
     scene.spheres = spheres;
     scene.meshes = meshes;
     scene.triangles = triangles;
+    SceneManager.scenes.push(scene);
+}
+
+function createSceneSpheres()
+{
+    spheres = [];
+    meshes = [];
+    triangles = [];
+
+    spheres.push(new Sphere(new Vec3(0, 0, 1), 0.3, new Material(new Vec3(1, 0, 0), new Vec3(1, 1, 1), 0, 0.5, 0.2, new Vec3(1, 0, 0))));       // Red sphere
+    spheres.push(new Sphere(new Vec3(0, 0.2, 0.8), 0.15, new Material(new Vec3(0,0,1), new Vec3(1, 1, 1), 0, 0.5, 0.2, new Vec3(0, 0, 1))));  // Blue sphere
+    spheres.push(new Sphere(new Vec3(0, -100.5, 2), 100, new Material(new Vec3(0, 1, 0))));    // Big sphere
+
+    let scene = new Scene();
+    scene.name = "Spheres";
+    scene.spheres = spheres;
+    scene.camera.forward = new Vec3(0, 0, 1);
+    scene.camera.fov = 90;
+    SceneManager.scenes.push(scene);
+}
+
+async function createSceneShinySpheres()
+{
+    spheres = [];
+    meshes = [];
+    triangles = [];
+
+    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_light.obj", triangles, new Material(new Vec3(0, 0, 0), new Vec3(1, 1, 1), 25)));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_top_bottom.obj", triangles, new Material(new Vec3(1, 1, 1))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_left.obj", triangles, new Material(new Vec3(1, 0, 0))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_right.obj", triangles, new Material(new Vec3(0, 1, 0))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_back.obj", triangles, new Material(new Vec3(1, 1, 1))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_front.obj", triangles, new Material(new Vec3(1, 1, 1))));
+    spheres.push(new Sphere(new Vec3(-0.5, -0.65, -5.1), 0.3, new Material(new Vec3(1, 1, 1), new Vec3(1, 1, 1), 0, 1, 1)));
+    spheres.push(new Sphere(new Vec3(0.5, -0.55, -5.1), 0.4, new Material(new Vec3(1, 1, 1), new Vec3(1, 1, 1), 0, 1, 1)));
+
+    let scene = new Scene(); 
+    scene.name = "Reflections";
+    scene.spheres = spheres;
+    scene.meshes = meshes;
+    scene.triangles = triangles;
+    scene.camera.position = new Vec3(0, 0, -3.6); 
+    scene.camera.fov = 90;
     SceneManager.scenes.push(scene);
 }
 
@@ -800,9 +878,9 @@ async function loadScene(index) {
     currentFrame = 0;
 
     SceneManager.loadScene(index);
-    await initMeshes();
 
-
+    console.log(SceneManager.currentScene.spheres.length);
+    await initObjects();
 }
 
 function render() { 
@@ -817,6 +895,8 @@ function render() {
 async function main() {
     await createSceneCornellBox();
     await createScenePlanet();
+    createSceneSpheres();
+    await createSceneShinySpheres();
 
     loadScene(0);
     render();
@@ -849,40 +929,8 @@ let skyColourHorizon = new Vec3(1, 1, 1);
 let skyColourZenith = new Vec3(0.3, 0.5, 0.9);
 let groundColour = new Vec3(0.2, 0.2, 0.2);
 
-let spheres = [
-    // new Sphere(new Vec3(-0.5, -0.2, 2), 0.3, new Material(new Vec3(1, 0, 0), new Vec3(1, 1, 1), 0, 1, 0.1)),       // Red sphere
-    // new Sphere(new Vec3(0.3,-0.35, 1.8), 0.15, new Material(new Vec3(0,0,1), new Vec3(1, 1, 1), 0, 1, 0.1)),  // Blue sphere
-    // new Sphere(new Vec3(0,-100.5, 2), 100, new Material(new Vec3(.7,.1,.7))),    // Big sphere
-];
-let spheresInfo = [];
-let sphereMaterials = [];
-for (let i = 0; i < spheres.length; i++)
-{
-    spheresInfo.push(spheres[i].centre.x);
-    spheresInfo.push(spheres[i].centre.y);
-    spheresInfo.push(spheres[i].centre.z);
-    spheresInfo.push(spheres[i].radius);
-    
-    sphereMaterials.push(spheres[i].material.colour.x);
-    sphereMaterials.push(spheres[i].material.colour.y);
-    sphereMaterials.push(spheres[i].material.colour.z);
-    sphereMaterials.push(spheres[i].material.smoothness);
-    
-    sphereMaterials.push(spheres[i].material.emissionColour.x);
-    sphereMaterials.push(spheres[i].material.emissionColour.y);
-    sphereMaterials.push(spheres[i].material.emissionColour.z);
-    sphereMaterials.push(spheres[i].material.emissionStrength);
-    
-    sphereMaterials.push(spheres[i].material.specularColour.x);
-    sphereMaterials.push(spheres[i].material.specularColour.y);
-    sphereMaterials.push(spheres[i].material.specularColour.z);
-    sphereMaterials.push(spheres[i].material.specularProbability);
-}
-let spheresInfoTex = makeDataTexture(gl, spheresInfo, 4);
-let sphereMatsTex = makeDataTexture(gl, sphereMaterials, 4);
-
+let spheres = [];
 let triangles = [];
-
 let meshes = [];
 
 // Create (empty) texture for raytracer output
@@ -905,6 +953,11 @@ let fboB = gl.createFramebuffer();
 gl.bindFramebuffer(gl.FRAMEBUFFER, fboB);
 gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, textureB, 0);
 gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+let spheresInfo = [];
+let sphereMaterials = [];
+let spheresInfoTex;
+let sphereMatsTex;
 
 let triangleInfo = [];
 let trianglesInfoTex;
