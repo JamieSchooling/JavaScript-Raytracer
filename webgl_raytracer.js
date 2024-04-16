@@ -491,21 +491,22 @@ function initWebGL() {
 }
 
 function updateCameraParams() {
-    let planeWidth = focusDistance * Math.tan(fov * 0.5 * (Math.PI / 180)) * 2;
+    let camera = SceneManager.currentScene.camera;
+    let planeWidth = camera.focusDistance * Math.tan(fov * 0.5 * (Math.PI / 180)) * 2;
     let planeHeight = planeWidth * aspectRatio;
     let viewParamsLocation = gl.getUniformLocation(raytraceProgram, "ViewParams");
-    gl.uniform3fv(viewParamsLocation, [planeWidth, planeHeight, focusDistance]);
+    gl.uniform3fv(viewParamsLocation, [planeWidth, planeHeight, camera.focusDistance]);
     let camLocalToWorldMatrixLocation = gl.getUniformLocation(raytraceProgram, "CamLocalToWorldMatrix");
     gl.uniformMatrix4fv(camLocalToWorldMatrixLocation, false,
         [
-            camRight.x, camRight.y, camRight.z, 0,
-            camUp.x, camUp.y, camUp.z, 0,
-            camForward.x, camForward.y, camForward.z, 0,
-            camPosition.x, camPosition.y, camPosition.z, 1,
+            camera.right.x, camera.right.y, camera.right.z, 0,
+            camera.up.x, camera.up.y, camera.up.z, 0,
+            camera.forward.x, camera.forward.y, camera.forward.z, 0,
+            camera.position.x, camera.position.y, camera.position.z, 1,
         ]
     );
     let worldSpaceCameraPosLocation = gl.getUniformLocation(raytraceProgram, "WorldSpaceCameraPos");
-    gl.uniform3fv(worldSpaceCameraPosLocation, [camPosition.x, camPosition.y, camPosition.z]);
+    gl.uniform3fv(worldSpaceCameraPosLocation, [camera.position.x, camera.position.y, camera.position.z]);
 
     let divergeStrengthLocation = gl.getUniformLocation(raytraceProgram, "DivergeStrength");
     gl.uniform1f(divergeStrengthLocation, divergeStrength);
@@ -517,20 +518,23 @@ function updateScreenParams() {
 }
 
 function updateLightParams() {
+    let sun = SceneManager.currentScene.sun;
+    let sky = SceneManager.currentScene.skybox;
+
     let sunDirLocation = gl.getUniformLocation(raytraceProgram, "SunDirection");
-    gl.uniform3fv(sunDirLocation, [sunDirection.x, sunDirection.y, sunDirection.z]);
+    gl.uniform3fv(sunDirLocation, [sun.direction.x, sun.direction.y, sun.direction.z]);
     let sunFocusLocation = gl.getUniformLocation(raytraceProgram, "SunFocus");
-    gl.uniform1f(sunFocusLocation, sunFocus);
+    gl.uniform1f(sunFocusLocation, sun.focus);
     let sunIntensityLocation = gl.getUniformLocation(raytraceProgram, "SunIntensity");
-    gl.uniform1f(sunIntensityLocation, sunIntensity);
+    gl.uniform1f(sunIntensityLocation, sun.intensity);
     
 
     let horizonColourLocation = gl.getUniformLocation(raytraceProgram, "SkyColourHorizon");
-    gl.uniform3fv(horizonColourLocation, [skyColourHorizon.x, skyColourHorizon.y, skyColourHorizon.z]);
+    gl.uniform3fv(horizonColourLocation, [sky.colourHorizon.x, sky.colourHorizon.y, sky.colourHorizon.z]);
     let skyColourLocation = gl.getUniformLocation(raytraceProgram, "SkyColourZenith");
-    gl.uniform3fv(skyColourLocation, [skyColourZenith.x, skyColourZenith.y, skyColourZenith.z]);
+    gl.uniform3fv(skyColourLocation, [sky.colourZenith.x, sky.colourZenith.y, sky.colourZenith.z]);
     let groundColourLocation = gl.getUniformLocation(raytraceProgram, "GroundColour");
-    gl.uniform3fv(groundColourLocation, [groundColour.x, groundColour.y, groundColour.z]);
+    gl.uniform3fv(groundColourLocation, [sky.groundColour.x, sky.groundColour.y, sky.groundColour.z]);
 }
 
 function setSpheres() {
