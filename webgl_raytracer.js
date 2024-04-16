@@ -773,6 +773,8 @@ async function loadScene(index) {
     console.log(index);
 
     // Create (empty) texture for raytracer output
+
+    gl.deleteTexture(textureA);
     textureA = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, textureA);
     gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, imageWidth, imageHeight);
@@ -782,6 +784,7 @@ async function loadScene(index) {
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, textureA, 0);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
+    gl.deleteTexture(textureB);
     textureB = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, textureB);
     gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, imageWidth, imageHeight);
@@ -790,8 +793,12 @@ async function loadScene(index) {
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, textureB, 0);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
+    currentFrame = 0;
+
     SceneManager.loadScene(index);
     await initMeshes();
+
+
 }
 
 function render() { 
