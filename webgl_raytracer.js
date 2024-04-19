@@ -638,8 +638,6 @@ function draw() {
 async function initObjects() {
     let scene = SceneManager.currentScene;
 
-    console.log(SceneManager.currentScene);
-
     spheres = scene.spheres;
     meshes = scene.meshes;
     triangles = scene.triangles;
@@ -833,7 +831,6 @@ async function createSceneShinySpheres()
 }
 
 async function loadScene(index) {
-    console.log(index);
 
     // Create (empty) texture for raytracer output
 
@@ -860,7 +857,6 @@ async function loadScene(index) {
 
     SceneManager.loadScene(index);
 
-    console.log(SceneManager.currentScene.spheres.length);
     await initObjects();
 }
 
