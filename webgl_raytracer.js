@@ -785,7 +785,7 @@ async function createSceneCornellBox() {
     meshes.push(await OBJLoader.meshFromOBJ("resources/cornell_box/box_cube_tall.obj", triangles, new Material(new Vec3(1, 1, 1))));
 
     let scene = new Scene();
-    scene.name = "Cornell Box";
+    scene.name = "Cornell-Box";
     scene.spheres = spheres;
     scene.meshes = meshes;
     scene.triangles = triangles;
@@ -855,7 +855,7 @@ async function createSceneDoF()
     spheres.push(new Sphere(new Vec3(-1.3, -1.15, -6), 0.55, new Material(new Vec3(1, 1, 1))));
 
     let scene = new Scene(); 
-    scene.name = "Depth of Field";
+    scene.name = "Depth-of-Field";
     scene.spheres = spheres;
     scene.meshes = meshes;
     scene.triangles = triangles;
@@ -907,13 +907,13 @@ function render() {
 }
 
 async function main() {
-    await createSceneCornellBox();
     await createScenePlanet();
     createSceneSpheres();
+    await createSceneCornellBox();
     await createSceneShinySpheres();
     await createSceneDoF();
 
-    loadScene(0);
+    loadScene(1);
     render();
 }
 
@@ -970,6 +970,22 @@ let currentFrame = 0;
 let dropdown = document.getElementById("sceneSelect");
 dropdown.addEventListener("change", async (event) => {
     await loadScene(event.target.value);
+});
+
+let saveButton = document.getElementById("saveImage");
+saveButton.addEventListener("click", (event) => {
+    rayTrace();
+    draw();
+    currentFrame++;
+
+    let canvasUrl = canvas.toDataURL();
+    const element = document.createElement('a');
+    element.href = canvasUrl;
+
+    element.download = `raytracer-${SceneManager.currentScene.name}`;
+
+    element.click();
+    element.remove();
 });
 
 initWebGL();
