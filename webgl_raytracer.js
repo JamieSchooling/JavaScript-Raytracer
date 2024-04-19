@@ -917,7 +917,7 @@ async function main() {
     await createSceneShinySpheres();
     await createSceneDoF();
 
-    loadScene(1);
+    loadScene(0);
     render();
 }
 
