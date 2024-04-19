@@ -15,6 +15,7 @@ uniform vec3 ViewParams;
 uniform mat4 CamLocalToWorldMatrix;
 uniform vec3 WorldSpaceCameraPos;
 uniform float DivergeStrength;
+uniform float DefocusStrength;
 
 uniform vec3 SunDirection;
 uniform float SunFocus;
@@ -341,12 +342,13 @@ void main()
     vec3 camUp = CamLocalToWorldMatrix[1].xyz;
 
     Ray ray;
-    ray.origin = WorldSpaceCameraPos;
     
     vec3 totalIncomingLight = vec3(0.0);
     
     for (int i = 0; i < PIXEL_SAMPLE_COUNT; i++)
     {
+        vec2 defocusJitter = RandomPointInCircle(rngState) * DefocusStrength / ScreenParams.x;
+        ray.origin = WorldSpaceCameraPos + camRight * defocusJitter.x + camUp * defocusJitter.y;
         vec2 jitter = RandomPointInCircle(rngState) * DivergeStrength / ScreenParams.x;
         vec3 jitteredFocusPoint = viewPoint.xyz + camRight * jitter.x + camUp * jitter.y;
         ray.dir = normalize(jitteredFocusPoint - ray.origin); 
@@ -491,6 +493,9 @@ function updateCameraParams() {
 
     let divergeStrengthLocation = gl.getUniformLocation(raytraceProgram, "DivergeStrength");
     gl.uniform1f(divergeStrengthLocation, camera.divergeStrength);
+    
+    let defocusStrengthLocation = gl.getUniformLocation(raytraceProgram, "DefocusStrength");
+    gl.uniform1f(defocusStrengthLocation, camera.defocusStrength);
 }
 
 function updateScreenParams() {
@@ -830,6 +835,38 @@ async function createSceneShinySpheres()
     SceneManager.scenes.push(scene);
 }
 
+async function createSceneDoF()
+{
+    spheres = [];
+    meshes = [];
+    triangles = [];
+
+    meshes.push(await OBJLoader.meshFromOBJ("resources/depth_of_field_objects/plane.obj", triangles, new Material(new Vec3(0.7, 0.1, 0.7))));
+    meshes.push(await OBJLoader.meshFromOBJ("resources/depth_of_field_objects/suzanne.obj", triangles, new Material(new Vec3(0, 0.7, 0.7))));
+    
+    
+    spheres.push(new Sphere(new Vec3(5.9, -1.15, -22), 0.55, new Material(new Vec3(1, 1, 1))));
+    spheres.push(new Sphere(new Vec3(4.7, -1.15, -20), 0.55, new Material(new Vec3(1, 1, 1))));
+    spheres.push(new Sphere(new Vec3(3.6, -1.15, -18), 0.55, new Material(new Vec3(1, 1, 1))));
+    spheres.push(new Sphere(new Vec3(2.5, -1.15, -16), 0.55, new Material(new Vec3(1, 1, 1))));
+    spheres.push(new Sphere(new Vec3(1.5, -1.15, -14), 0.55, new Material(new Vec3(1, 1, 1))));
+    spheres.push(new Sphere(new Vec3(-0.2, -1.15, -10), 0.55, new Material(new Vec3(1, 1, 1))));
+    spheres.push(new Sphere(new Vec3(-0.8, -1.15, -8), 0.55, new Material(new Vec3(1, 1, 1))));
+    spheres.push(new Sphere(new Vec3(-1.3, -1.15, -6), 0.55, new Material(new Vec3(1, 1, 1))));
+
+    let scene = new Scene(); 
+    scene.name = "Depth of Field";
+    scene.spheres = spheres;
+    scene.meshes = meshes;
+    scene.triangles = triangles;
+    scene.camera.position = new Vec3(0.4, -0.4, 0);
+    scene.camera.fov = 30;
+    scene.camera.focusDistance = 12;
+    scene.camera.defocusStrength = 100;
+    scene.skybox.groundColour = new Vec3(1, 1, 1);
+    SceneManager.scenes.push(scene);
+}
+
 async function loadScene(index) {
 
     // Create (empty) texture for raytracer output
@@ -874,6 +911,7 @@ async function main() {
     await createScenePlanet();
     createSceneSpheres();
     await createSceneShinySpheres();
+    await createSceneDoF();
 
     loadScene(0);
     render();

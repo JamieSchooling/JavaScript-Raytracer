@@ -8,7 +8,7 @@ export default class Camera {
         this.forward = new Vec3(0, 0, -1);
         this.fov = 40;
         this.divergeStrength = 1;
-        this.defocusStrength = 1;
+        this.defocusStrength = 0;
         this.focusDistance = 1;
     }
 }
