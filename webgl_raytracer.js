@@ -10,6 +10,8 @@ const int MAX_MESHES = 10000;
 const int MAX_BOUNCE_COUNT = 4;
 const int PIXEL_SAMPLE_COUNT = 32;
 
+uniform bool UsePhong;
+
 uniform vec2 ScreenParams;
 uniform vec3 ViewParams;
 uniform mat4 CamLocalToWorldMatrix;
@@ -298,6 +300,37 @@ vec3 GetEnvironmentLight(Ray ray)
 
 vec3 RayColour(Ray ray, inout uint rngState)
 {
+    if (UsePhong)
+    {
+        HitInfo hitInfo = TraceRay(ray);
+        if (!hitInfo.didHit) return GetEnvironmentLight(ray);
+
+        vec3 albedo = hitInfo.material.colour;
+        float diffuse = max(dot(hitInfo.normal, SunDirection), 0.0);
+        float specularPower = 5.8;
+        float specularStrength = 0.01;
+        vec3 reflectedDir = SunDirection - normalize((hitInfo.normal * 2.0 * dot(hitInfo.normal, SunDirection)));
+        vec3 viewDir = normalize(ray.origin - (hitInfo.hitPoint));
+        float specular = pow(max(dot(viewDir, reflectedDir), 0.0), specularPower) * specularStrength;
+
+        float ambient = 0.05;
+        vec3 colour = albedo * (ambient + diffuse + specular);
+
+        ray.origin = hitInfo.hitPoint;
+        ray.dir = SunDirection;
+
+        if (TraceRay(ray).didHit) 
+        {
+            colour *= 0.4;
+        }
+        
+        colour.x = sqrt(colour.x);
+        colour.y = sqrt(colour.y);
+        colour.z = sqrt(colour.z);
+
+        return colour;
+    }
+
     vec3 incomingLight = vec3(0.0);
     vec3 rayColour = vec3(1.0);
 
@@ -341,23 +374,45 @@ void main()
     vec3 camRight = CamLocalToWorldMatrix[0].xyz;
     vec3 camUp = CamLocalToWorldMatrix[1].xyz;
 
-    Ray ray;
-    
-    vec3 totalIncomingLight = vec3(0.0);
-    
-    for (int i = 0; i < PIXEL_SAMPLE_COUNT; i++)
+    if (UsePhong) 
     {
-        vec2 defocusJitter = RandomPointInCircle(rngState) * DefocusStrength / ScreenParams.x;
-        ray.origin = WorldSpaceCameraPos + camRight * defocusJitter.x + camUp * defocusJitter.y;
-        vec2 jitter = RandomPointInCircle(rngState) * DivergeStrength / ScreenParams.x;
-        vec3 jitteredFocusPoint = viewPoint.xyz + camRight * jitter.x + camUp * jitter.y;
-        ray.dir = normalize(jitteredFocusPoint - ray.origin); 
-        totalIncomingLight += RayColour(ray, rngState);
-    }
-    vec3 pixelColour = totalIncomingLight / float(PIXEL_SAMPLE_COUNT);
+        vec3 viewPointLocal = vec3(pixelPos.xy - 0.5, 1) * ViewParams;
+        vec4 viewPoint = CamLocalToWorldMatrix * vec4(viewPointLocal, 1);
 
-    vec3 baseColour = texture(BaseImage, pixelPos).xyz;
-    fragColour = vec4(baseColour + (pixelColour - baseColour) / (Frame + 1.0), 1.0);
+        Ray ray;
+        ray.origin = vec3(0, 0, 0);
+        
+        vec3 colour = vec3(0.0, 0.0, 0.0);
+        for (int i = 0; i < PIXEL_SAMPLE_COUNT; i++) {
+            vec2 jitter = RandomPointInCircle(rngState) * DivergeStrength / ScreenParams.x;
+            vec3 jitteredFocusPoint = viewPoint.xyz + camRight * jitter.x + camUp * jitter.y;
+            ray.dir = normalize(jitteredFocusPoint - ray.origin); 
+            colour += RayColour(ray, rngState);
+        }
+        colour *= ( 1.0 / float(PIXEL_SAMPLE_COUNT));
+
+        fragColour = vec4(colour, 1.0);
+    }
+    else 
+    {
+        Ray ray;
+        
+        vec3 totalIncomingLight = vec3(0.0);
+        
+        for (int i = 0; i < PIXEL_SAMPLE_COUNT; i++)
+        {
+            vec2 defocusJitter = RandomPointInCircle(rngState) * DefocusStrength / ScreenParams.x;
+            ray.origin = WorldSpaceCameraPos + camRight * defocusJitter.x + camUp * defocusJitter.y;
+            vec2 jitter = RandomPointInCircle(rngState) * DivergeStrength / ScreenParams.x;
+            vec3 jitteredFocusPoint = viewPoint.xyz + camRight * jitter.x + camUp * jitter.y;
+            ray.dir = normalize(jitteredFocusPoint - ray.origin); 
+            totalIncomingLight += RayColour(ray, rngState);
+        }
+        vec3 pixelColour = totalIncomingLight / float(PIXEL_SAMPLE_COUNT);
+
+        vec3 baseColour = texture(BaseImage, pixelPos).xyz;
+        fragColour = vec4(baseColour + (pixelColour - baseColour) / (Frame + 1.0), 1.0);
+    }    
 }
 `
 
@@ -501,6 +556,9 @@ function updateCameraParams() {
 function updateScreenParams() {
     let screenParamsLocation = gl.getUniformLocation(raytraceProgram, "ScreenParams");
     gl.uniform2fv(screenParamsLocation, [imageWidth, imageHeight]);
+
+    let usePhongLocation = gl.getUniformLocation(raytraceProgram, "UsePhong");
+    gl.uniform1i(usePhongLocation, usePhong);
 }
 
 function updateLightParams() {
@@ -765,6 +823,7 @@ async function createScenePlanet() {
     scene.spheres = spheres;
     scene.meshes = meshes;
     scene.triangles = triangles;
+    scene.sun.direction = new Vec3(0.6, 0.5, 1).normalised();
     scene.skybox.colourHorizon = new Vec3(0, 0, 0);
     scene.skybox.colourZenith = new Vec3(0.05, 0.1, 0.2);
     scene.skybox.groundColour = new Vec3(0, 0, 0);
@@ -805,6 +864,7 @@ function createSceneSpheres()
     let scene = new Scene();
     scene.name = "Spheres";
     scene.spheres = spheres;
+    scene.sun.direction = new Vec3(1.1, 1.3, -1.5).normalised()
     scene.camera.forward = new Vec3(0, 0, 1);
     scene.camera.fov = 90;
     SceneManager.scenes.push(scene);
@@ -859,6 +919,8 @@ async function createSceneDoF()
     scene.spheres = spheres;
     scene.meshes = meshes;
     scene.triangles = triangles;
+    scene.sun.direction = new Vec3(0.6, 0.5, 1).normalised();
+    scene.sun.intensity = 30;
     scene.camera.position = new Vec3(0.4, -0.4, 0);
     scene.camera.fov = 30;
     scene.camera.focusDistance = 12;
@@ -869,8 +931,19 @@ async function createSceneDoF()
 
 async function loadScene(index) {
 
-    // Create (empty) texture for raytracer output
+    clearCanvas();
 
+    SceneManager.loadScene(index);
+
+    await initObjects();
+
+    if (!shouldRender) {
+        shouldRender = true;
+        render();
+    }
+}
+
+function clearCanvas() {
     gl.deleteTexture(textureA);
     textureA = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, textureA);
@@ -889,16 +962,7 @@ async function loadScene(index) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, fboB);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, textureB, 0);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-    SceneManager.loadScene(index);
-
-    await initObjects();
-
     currentFrame = 0;
-    if (!shouldRender) {
-        shouldRender = true;
-        render();
-    }
 }
 
 function render() { 
@@ -971,6 +1035,7 @@ let meshMatsTex;
 
 let currentFrame = 0;
 let shouldRender = true;
+let usePhong = false;
 
 let dropdown = document.getElementById("sceneSelect");
 dropdown.addEventListener("change", async (event) => {
@@ -987,7 +1052,7 @@ saveButton.addEventListener("click", (event) => {
     const element = document.createElement('a');
     element.href = canvasUrl;
     
-    element.download = `raytracer-${SceneManager.currentScene.name}`;
+    element.download = usePhong ? `raytracer-${SceneManager.currentScene.name}-Phong` : `raytracer-${SceneManager.currentScene.name}`;
     
     element.click();
     element.remove();
@@ -1004,6 +1069,12 @@ resumeRenderBtn.addEventListener("click", (event) => {
         shouldRender = true;
         render();
     }
+});
+
+let togglePhongBtn = document.getElementById("togglePhong");
+togglePhongBtn.addEventListener("click", (event) => {
+    usePhong = !usePhong;
+    clearCanvas();
 });
 
 initWebGL();
