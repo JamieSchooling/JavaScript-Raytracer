@@ -120,45 +120,26 @@ HitInfo RaySphere(Ray ray, vec3 sphereCentre, float sphereRadius)
 HitInfo RayTriangle(Ray ray, Triangle tri) {
     float epsilon = 0.0000001;
 
-    HitInfo hitInfo;
-    hitInfo.didHit = false;
+    vec3 edgeAB = tri.posB - tri.posA;
+    vec3 edgeAC = tri.posC - tri.posA;
+    vec3 normalVector = cross(edgeAB, edgeAC);
+    vec3 ao = ray.origin - tri.posA;
+    vec3 dao = cross(ao, ray.dir);
 
-    vec3 edge1 = tri.posB - tri.posA;
-    vec3 edge2 = tri.posC - tri.posA;
-    vec3 rayCrossEdge2 = cross(ray.dir, edge2);
-    float determinant = dot(edge1, rayCrossEdge2);
-
-    if (determinant > -epsilon && determinant < epsilon) {
-        return hitInfo;
-    }
-
+    float determinant = -dot(ray.dir, normalVector);
     float invDet = 1.0 / determinant;
-    vec3 s = ray.origin - tri.posA;
-    float u = invDet * dot(s, rayCrossEdge2);
 
-    if (u < 0.0 || u > 1.0) {
-        return hitInfo;
-    }
+    float dst = dot(ao, normalVector) * invDet;
+    float u = dot(edgeAC, dao) * invDet;
+    float v = -dot(edgeAB, dao) * invDet;
+    float w = 1.0 - u - v;
 
-    vec3 sCrossEdge1 = cross(s, edge1);
-    float v = invDet * dot(ray.dir, sCrossEdge1);
-    float w = 1.0 - u - v; 
-
-    if (v < 0.0 || u + v > 1.0) {
-        return hitInfo;
-    }
-
-    float dst = invDet * dot(edge2, sCrossEdge1);
-
-    if (dst > epsilon) {
-        hitInfo.didHit = true;
-        hitInfo.hitPoint = ray.origin + ray.dir * dst;
-        hitInfo.normal = normalize(tri.normalB * u + tri.normalC * v + tri.normalA * w);
-        hitInfo.dst = dst;
-        return hitInfo;
-    } else {
-        return hitInfo;
-    }      
+    HitInfo hitInfo;
+    hitInfo.didHit = determinant >= epsilon && dst >= 0.0 && u >= 0.0 && v >= 0.0 && w >= 0.0;
+    hitInfo.hitPoint = ray.origin + ray.dir * dst;
+    hitInfo.normal = normalize(tri.normalB * u + tri.normalC * v + tri.normalA * w);
+    hitInfo.dst = dst;
+    return hitInfo;
 }
 
 bool RayBoundingBox(Ray ray, vec3 boxMin, vec3 boxMax)
