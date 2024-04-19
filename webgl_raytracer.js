@@ -765,7 +765,7 @@ async function createScenePlanet() {
     scene.spheres = spheres;
     scene.meshes = meshes;
     scene.triangles = triangles;
-    scene.skybox.colourHorizon = new Vec3(0.1, 0.1, 0.3);
+    scene.skybox.colourHorizon = new Vec3(0, 0, 0);
     scene.skybox.colourZenith = new Vec3(0.05, 0.1, 0.2);
     scene.skybox.groundColour = new Vec3(0, 0, 0);
     SceneManager.scenes.push(scene);
