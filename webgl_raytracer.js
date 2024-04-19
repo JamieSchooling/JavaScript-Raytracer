@@ -890,11 +890,15 @@ async function loadScene(index) {
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, textureB, 0);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
-    currentFrame = 0;
-
     SceneManager.loadScene(index);
 
     await initObjects();
+
+    currentFrame = 0;
+    if (!shouldRender) {
+        shouldRender = true;
+        render();
+    }
 }
 
 function render() { 
@@ -903,7 +907,7 @@ function render() {
     draw();
 
     currentFrame++;
-    requestAnimationFrame(render);   
+    if (shouldRender) requestAnimationFrame(render);   
 }
 
 async function main() {
@@ -966,6 +970,7 @@ let meshInfoTex;
 let meshMatsTex;
 
 let currentFrame = 0;
+let shouldRender = true;
 
 let dropdown = document.getElementById("sceneSelect");
 dropdown.addEventListener("change", async (event) => {
@@ -977,15 +982,28 @@ saveButton.addEventListener("click", (event) => {
     rayTrace();
     draw();
     currentFrame++;
-
+    
     let canvasUrl = canvas.toDataURL();
     const element = document.createElement('a');
     element.href = canvasUrl;
-
+    
     element.download = `raytracer-${SceneManager.currentScene.name}`;
-
+    
     element.click();
     element.remove();
+});
+
+let stopRenderBtn = document.getElementById("stopRender");
+stopRenderBtn.addEventListener("click", (event) => {
+    shouldRender = false;
+});
+
+let resumeRenderBtn = document.getElementById("resumeRender");
+resumeRenderBtn.addEventListener("click", (event) => {
+    if (!shouldRender) {
+        shouldRender = true;
+        render();
+    }
 });
 
 initWebGL();
