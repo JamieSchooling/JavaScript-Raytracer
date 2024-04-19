@@ -8,7 +8,7 @@ const int MAX_SPHERES = 10000;
 const int MAX_TRIS = 10000;
 const int MAX_MESHES = 10000;
 const int MAX_BOUNCE_COUNT = 4;
-const float PIXEL_SAMPLE_COUNT = 32.0;
+const int PIXEL_SAMPLE_COUNT = 32;
 
 uniform vec2 ScreenParams;
 uniform vec3 ViewParams;
@@ -345,14 +345,14 @@ void main()
     
     vec3 totalIncomingLight = vec3(0.0);
     
-    for (float i = 0.0; i < PIXEL_SAMPLE_COUNT;  i++)
+    for (int i = 0; i < PIXEL_SAMPLE_COUNT; i++)
     {
         vec2 jitter = RandomPointInCircle(rngState) * DivergeStrength / ScreenParams.x;
         vec3 jitteredFocusPoint = viewPoint.xyz + camRight * jitter.x + camUp * jitter.y;
         ray.dir = normalize(jitteredFocusPoint - ray.origin); 
         totalIncomingLight += RayColour(ray, rngState);
     }
-    vec3 pixelColour = totalIncomingLight / PIXEL_SAMPLE_COUNT;
+    vec3 pixelColour = totalIncomingLight / float(PIXEL_SAMPLE_COUNT);
 
     vec3 baseColour = texture(BaseImage, pixelPos).xyz;
     fragColour = vec4(baseColour + (pixelColour - baseColour) / (Frame + 1.0), 1.0);
@@ -892,23 +892,6 @@ let drawProgram;
 let imageWidth = canvas.width;
 let imageHeight = canvas.height;
 let aspectRatio = imageHeight / imageWidth;
-
-let camPosition = new Vec3(0, 0, 0);
-let camUp = new Vec3(0, 1, 0);
-let camRight = new Vec3(1, 0, 0);
-let camForward = new Vec3(0, 0, -1);
-let fov = 40;
-let divergeStrength = 1;
-let defocusStrength = 1;
-let focusDistance = 1;
-
-let sunDirection  = new Vec3(0.6, 0.5, -1).normalised();
-let sunIntensity = 40;
-let sunFocus = 200;
-
-let skyColourHorizon = new Vec3(1, 1, 1);
-let skyColourZenith = new Vec3(0.3, 0.5, 0.9);
-let groundColour = new Vec3(0.2, 0.2, 0.2);
 
 let spheres = [];
 let triangles = [];
